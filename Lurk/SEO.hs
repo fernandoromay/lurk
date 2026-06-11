@@ -2,48 +2,56 @@
 {-# LANGUAGE QuasiQuotes #-}
 module Lurk.SEO
     ( SEO(..)
+    , Alternate(..)
     , defaultSEO
     , renderSEO
     ) where
 
 import Data.Text (Text)
-import Lurk.Html (Html, concatHtml, preEscapedToHtml)
+import Lurk.Html (Html, concatHtml)
 import Lurk.QQ (lurk)
 
 data SEO = SEO
-    { pageTitle     :: Text
-    , title         :: Text
-    , description   :: Text
-    , canonical     :: Maybe Text
-    , ogTitle       :: Maybe Text
-    , ogDescription :: Maybe Text
-    , ogType        :: Maybe Text
-    , ogImage       :: Maybe Text
-    , customTags    :: Html
+    { title           :: Text
+    , metaTitle       :: Text
+    , metaDescription :: Text
+    , canonical       :: Maybe Text
+    , alternates      :: [Alternate]
+    , ogTitle         :: Maybe Text
+    , ogDescription   :: Maybe Text
+    , ogType          :: Maybe Text
+    , ogImage         :: Maybe Text
+    , customTags      :: Html
     }
 
--- | Requires the three most important tags to be provided, preventing devs
--- from leaving them blank accidentally.
-defaultSEO :: Text -> Text -> Text -> SEO
-defaultSEO pt t d =
-    SEO
-        { pageTitle = pt
-        , title = t
-        , description = d
-        , canonical = Nothing
-        , ogTitle = Nothing
-        , ogDescription = Nothing
-        , ogType = Nothing
-        , ogImage = Nothing
-        , customTags = mempty
-        }
+data Alternate = Alternate
+    { hreflang :: Text
+    , href     :: Text
+    }
+
+defaultSEO :: SEO
+defaultSEO = SEO
+    { title = "UX Title. Change this, please!"
+    , metaTitle = "Search Title. This should be optimized for search engines"
+    , metaDescription = "Search Description. This should be optimized for search engines"
+
+    -- Optional fields
+    , canonical = Nothing
+    , alternates = []
+    , ogTitle = Nothing
+    , ogDescription = Nothing
+    , ogType = Nothing
+    , ogImage = Nothing
+    , customTags = mempty
+    }
 
 renderSEO :: SEO -> Html
 renderSEO seo = [lurk|
-    <title>{seo.pageTitle}</title>
-    <meta name="title" content="{seo.title}">
-    <meta name="description" content="{seo.description}">
+    <title>{seo.title}</title>
+    <meta name="title" content="{seo.metaTitle}">
+    <meta name="description" content="{seo.metaDescription}">
     {renderCanonical seo.canonical}
+    {renderAlternates seo.alternates}
     {renderOgTitle seo.ogTitle}
     {renderOgDescription seo.ogDescription}
     {renderOgType seo.ogType}
@@ -53,6 +61,9 @@ renderSEO seo = [lurk|
   where
     renderCanonical (Just c) = [lurk|<link rel="canonical" href="{c}">|]
     renderCanonical Nothing  = mempty
+
+    renderAlternates = concatHtml . map (\a ->
+        [lurk|<link rel="alternate" hreflang="{a.hreflang}" href="{a.href}">|])
 
     renderOgTitle (Just t) = [lurk|<meta property="og:title" content="{t}">|]
     renderOgTitle Nothing  = mempty
