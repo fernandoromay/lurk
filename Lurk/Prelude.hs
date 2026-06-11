@@ -8,13 +8,14 @@ module Lurk.Prelude
     , scotty
     , get
     , post
-    , html
     , param
     , lurk
     , renderHtml
     , renderView
     , Html
     , ToHtml(..)
+    , asset
+    , mkAssetPath
     ) where
 
 import Prelude
@@ -26,6 +27,7 @@ import Web.Scotty (ActionM, ScottyM, scotty, get, post, html, param)
 -- Our own custom HSX engine
 import Lurk.QQ (lurk)
 import Lurk.Html (Html, ToHtml(..), renderHtml)
+import Lurk.Assets (asset, mkAssetPath)
 import qualified Data.Text.Lazy as TL
 
 -- | Renders LURK Html into a Scotty response

@@ -49,7 +49,10 @@ parseSimpleCode :: String -> Q Exp
 parseSimpleCode code = 
     case words code of
         [] -> stringE ""
-        (f:args) -> foldl appE (varE (mkName f)) (map (varE . mkName) args)
+        (f:args) -> foldl appE (varE (mkName f)) (map mkArg args)
+  where
+    mkArg arg@('"':_) = litE (stringL (init (tail arg)))
+    mkArg arg         = varE (mkName arg)
 
 -- | The LURK QuasiQuoter!
 lurk :: QuasiQuoter
