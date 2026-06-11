@@ -8,6 +8,12 @@ build-type:         Simple
 
 library
     default-language: GHC2021
+    default-extensions: OverloadedStrings
+                        DeriveDataTypeable
+                        DeriveGeneric
+                        QuasiQuotes
+                        TemplateHaskell
+                        DuplicateRecordFields
     hs-source-dirs:   .
 
     exposed-modules:  Lurk.Prelude
