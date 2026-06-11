@@ -2,7 +2,7 @@
 module Main where
 
 import System.Environment (getArgs)
-import System.Process (callProcess)
+import System.Process (callProcess, rawSystem)
 import System.Directory
 import System.FilePath
 import Data.List (isSuffixOf, sort)
@@ -16,7 +16,15 @@ main = do
     case args of
         ["run"] -> runProject
         ["build"] -> buildProject
-        _ -> putStrLn "Usage: lurk run | lurk build"
+        ["kill"] -> killPort "3000"
+        ["kill", port] -> killPort port
+        _ -> putStrLn "Usage: lurk run | lurk build | lurk kill [port]"
+
+killPort :: String -> IO ()
+killPort port = do
+    putStrLn $ "Killing processes holding port " ++ port ++ "..."
+    _ <- rawSystem "fuser" ["-k", port ++ "/tcp"]
+    return ()
 
 runProject :: IO ()
 runProject = do
