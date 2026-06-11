@@ -1,11 +1,14 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Lurk.Html where
 
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.String (IsString)
 
 -- | The core LURK Html type. 
 -- For now, it's a wrapper around Text, but it can be expanded into a DOM tree later.
 newtype Html = Html { renderHtml :: Text }
+    deriving (Semigroup, Monoid, IsString)
 
 class ToHtml a where
     toHtml :: a -> Html
