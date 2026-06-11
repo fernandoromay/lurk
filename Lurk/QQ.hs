@@ -99,7 +99,7 @@ parseSimpleCode :: String -> Q Exp
 parseSimpleCode code = 
     case tokenize code of
         [] -> stringE ""
-        [single] -> parseToken single
+        [singleToken] -> parseToken singleToken
         (f:args) -> foldl appE (parseToken f) (map parseToken args)
 
 -- | The LURK QuasiQuoter!
