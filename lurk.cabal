@@ -33,3 +33,14 @@ library
                       directory,
                       filepath,
                       time
+
+executable lurk
+    default-language: GHC2021
+    default-extensions: OverloadedStrings
+    main-is:          Main.hs
+    hs-source-dirs:   cli
+    build-depends:    base ^>=4.17.2.1,
+                      directory,
+                      filepath,
+                      text,
+                      process
