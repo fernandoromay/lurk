@@ -1,0 +1,29 @@
+cabal-version:      3.0
+name:               lurk
+version:            0.1.0.0
+synopsis:           A lightweight, Nix-free Haskell web framework
+license:            MIT
+author:             Lurk Team
+build-type:         Simple
+
+library
+    default-language: GHC2021
+    hs-source-dirs:   .
+
+    exposed-modules:  Lurk.Prelude
+                      Lurk.Routes
+                      Lurk.Html
+                      Lurk.QQ
+                      Lurk.Assets
+                      Lurk.SEO
+
+    build-depends:    base ^>=4.17.2.1,
+                      scotty,
+                      text,
+                      containers,
+                      mtl,
+                      megaparsec,
+                      template-haskell,
+                      directory,
+                      filepath,
+                      time
