@@ -6,6 +6,7 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 import Data.Void
 import qualified Data.Text as T
+import Data.Char (isSpace)
 
 import Lurk.Html (concatHtml, preEscapedToHtml, toHtml)
 
@@ -31,7 +32,8 @@ parser = many (try haskellExp <|> literal) <* eof
 -- | Converts the parsed chunks into a single Template Haskell Expression.
 parseLurkExp :: String -> Q Exp
 parseLurkExp input = do
-    case parse parser "" input of
+    let trim = reverse . dropWhile isSpace . reverse . dropWhile isSpace
+    case parse parser "" (trim input) of
         Left err -> fail (errorBundlePretty err)
         Right chunks -> do
             let toExpChunk (Literal str) = 
