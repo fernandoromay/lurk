@@ -8,7 +8,9 @@ module Lurk.Prelude
     , scotty
     , get
     , post
-    , param
+    , captureParam
+    , queryParam
+    , formParam
     , lurk
     , renderHtml
     , renderView
@@ -27,7 +29,7 @@ import Prelude
 import Data.Text (Text)
 import Data.Map (Map)
 import Control.Monad.IO.Class (liftIO)
-import Web.Scotty (ActionM, ScottyM, scotty, get, post, html, param, middleware, notFound)
+import Web.Scotty (ActionM, ScottyM, scotty, get, post, html, captureParam, queryParam, formParam, middleware, notFound)
 
 -- Our own custom HSX engine
 import Lurk.QQ (lurk)
