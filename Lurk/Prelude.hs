@@ -20,6 +20,7 @@ module Lurk.Prelude
     , postRoute
     , middleware
     , notFound
+    , module Lurk.SEO
     ) where
 
 import Prelude
@@ -32,6 +33,7 @@ import Web.Scotty (ActionM, ScottyM, scotty, get, post, html, param, middleware,
 import Lurk.QQ (lurk)
 import Lurk.Html (Html, ToHtml(..), renderHtml)
 import Lurk.Assets (asset, mkAssetPath)
+import Lurk.SEO
 import qualified Data.Text.Lazy as TL
 
 -- Routes Handlers
