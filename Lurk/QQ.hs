@@ -42,17 +42,63 @@ parseLurkExp input = do
             listExp <- listE (map toExpChunk chunks)
             appE (varE 'concatHtml) (return listExp)
 
--- | A naive Haskell parser that handles `var` and `func arg1 arg2`
--- It splits by space and applies them as function calls.
--- More complex expressions will require a real Haskell AST parser.
+-- | Extracts balanced parentheses
+extractParens :: String -> Int -> String -> (String, String)
+extractParens [] _ acc = (reverse acc, [])
+extractParens (c:cs) p acc
+    | c == '(' = extractParens cs (p+1) (c:acc)
+    | c == ')' = if p == 1 then (reverse acc, cs) else extractParens cs (p-1) (c:acc)
+    | c == '"' = 
+        let (str, rest) = break (== '"') cs
+        in if null rest then extractParens rest p (reverse ("\"" ++ str) ++ acc)
+           else extractParens (tail rest) p (reverse ("\"" ++ str ++ "\"") ++ acc)
+    | otherwise = extractParens cs p (c:acc)
+
+nextToken :: String -> (String, String)
+nextToken "" = ("", "")
+nextToken (c:cs)
+    | c == '"' = 
+        let (str, rest) = break (== '"') cs
+        in if null rest then ("\"" ++ str, "") else ("\"" ++ str ++ "\"", tail rest)
+    | c == '(' =
+        let (inside, rest) = extractParens cs 1 ""
+        in ("(" ++ inside ++ ")", rest)
+    | otherwise = 
+        let (w, rest) = span (\x -> x /= ' ' && x /= '(' && x /= '"') (c:cs)
+        in (w, rest)
+
+tokenize :: String -> [String]
+tokenize [] = []
+tokenize s = 
+    let s' = dropWhile (== ' ') s
+    in if null s' then []
+       else let (tok, rest) = nextToken s'
+            in tok : tokenize rest
+
+splitByDot :: String -> [String]
+splitByDot "" = []
+splitByDot s = 
+    let (w, rest) = break (== '.') s
+    in w : if null rest then [] else splitByDot (tail rest)
+
+parseToken :: String -> Q Exp
+parseToken "" = stringE ""
+parseToken s
+    | head s == '"' && last s == '"' = litE (stringL (init (tail s)))
+    | head s == '(' && last s == ')' = parseSimpleCode (init (tail s))
+    | '.' `elem` s = 
+        let parts = splitByDot s
+        in foldl (\acc field -> appE (varE (mkName field)) acc) (varE (mkName (head parts))) (tail parts)
+    | otherwise = varE (mkName s)
+
+-- | A smarter Haskell parser that handles function application, parens, 
+-- string literals, and translates `a.b` into `b a`.
 parseSimpleCode :: String -> Q Exp
 parseSimpleCode code = 
-    case words code of
+    case tokenize code of
         [] -> stringE ""
-        (f:args) -> foldl appE (varE (mkName f)) (map mkArg args)
-  where
-    mkArg arg@('"':_) = litE (stringL (init (tail arg)))
-    mkArg arg         = varE (mkName arg)
+        [single] -> parseToken single
+        (f:args) -> foldl appE (parseToken f) (map parseToken args)
 
 -- | The LURK QuasiQuoter!
 lurk :: QuasiQuoter
