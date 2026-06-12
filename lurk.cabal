@@ -37,6 +37,7 @@ library
                       filepath,
                       time,
                       wai,
+                      http-types,
                       bytestring,
                       haskell-src-meta,
                       syb

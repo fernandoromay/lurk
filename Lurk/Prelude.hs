@@ -24,6 +24,7 @@ module Lurk.Prelude
     postRoute,
     currentPath,
     activeClass,
+    trailingSlash,
     middleware,
     notFound,
     module Lurk.SEO,
@@ -40,7 +41,7 @@ import Lurk.Assets (asset, mkAssetPath)
 import Lurk.Html (Html, ToHtml (..), renderHtml)
 import Lurk.QQ (lurk)
 -- Routes Handlers
-import Lurk.Routes (activeClass, currentPath, getRoute, postRoute)
+import Lurk.Routes (activeClass, currentPath, getRoute, postRoute, trailingSlash)
 import Lurk.SEO
 import Web.Scotty (ActionM, ScottyM, captureParam, formParam, get, html, middleware, notFound, post, queryParam, scotty)
 import Prelude
