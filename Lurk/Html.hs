@@ -23,6 +23,9 @@ instance ToHtml String where
 instance ToHtml Html where
     toHtml = id
 
+instance ToHtml Int where
+    toHtml = toHtml . show
+
 -- | Unsafe HTML injection (for the quasi-quoter literal parts)
 preEscapedToHtml :: Text -> Html
 preEscapedToHtml = Html
