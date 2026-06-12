@@ -13,6 +13,8 @@ library
                         DeriveGeneric
                         QuasiQuotes
                         TemplateHaskell
+                        DataKinds
+                        TypeApplications
                         DuplicateRecordFields
                         ImplicitParams
     hs-source-dirs:   .
@@ -35,7 +37,9 @@ library
                       filepath,
                       time,
                       wai,
-                      bytestring
+                      bytestring,
+                      haskell-src-meta,
+                      syb
 
 executable lurk
     default-language: GHC2021

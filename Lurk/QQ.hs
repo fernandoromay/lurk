@@ -7,6 +7,9 @@ import Text.Megaparsec.Char
 import Data.Void
 import qualified Data.Text as T
 import Data.Char (isSpace)
+import Data.List (isPrefixOf)
+import Language.Haskell.Meta.Parse (parseExp)
+import Data.Text (Text)
 
 import Lurk.Html (concatHtml, preEscapedToHtml, toHtml)
 
@@ -29,6 +32,47 @@ parser = many (try haskellExp <|> literal) <* eof
         text <- takeWhile1P (Just "Literal text") (/= '{')
         return (Literal text)
 
+extractDotChain :: Exp -> Maybe [String]
+extractDotChain (VarE n) = Just [nameBase n]
+extractDotChain (UInfixE e1 (VarE op) e2) 
+    | nameBase op == "." = do
+        left <- extractDotChain e1
+        right <- extractDotChain e2
+        return (left ++ right)
+extractDotChain _ = Nothing
+
+applyFields :: [String] -> Exp -> Exp
+applyFields fields expr = foldl (\acc field -> GetFieldE acc field) expr fields
+
+rebalanceAndApply :: [String] -> Exp -> Exp
+rebalanceAndApply fields (AppE f x) = AppE f (rebalanceAndApply fields x)
+rebalanceAndApply fields x = applyFields fields x
+
+transformExp :: Exp -> Exp
+transformExp (LitE (StringL s)) = SigE (LitE (StringL s)) (ConT ''Text)
+transformExp (LitE (IntegerL n)) = SigE (LitE (IntegerL n)) (ConT ''Int)
+transformExp (UInfixE e1 (VarE op) e2)
+    | nameBase op == "." = 
+        case extractDotChain e2 of
+            Just fields -> rebalanceAndApply fields (transformExp e1)
+            Nothing -> UInfixE (transformExp e1) (VarE op) (transformExp e2)
+transformExp (AppE e1 e2) = AppE (transformExp e1) (transformExp e2)
+transformExp (InfixE me1 e me2) = InfixE (fmap transformExp me1) (transformExp e) (fmap transformExp me2)
+transformExp (UInfixE e1 e2 e3) = UInfixE (transformExp e1) (transformExp e2) (transformExp e3)
+transformExp (ParensE e) = ParensE (transformExp e)
+transformExp (CondE e1 e2 e3) = CondE (transformExp e1) (transformExp e2) (transformExp e3)
+transformExp (ListE es) = ListE (map transformExp es)
+transformExp (VarE n)
+    | "__implicit_" `isPrefixOf` nameBase n = ImplicitParamVarE (drop 11 (nameBase n))
+transformExp e = e
+
+parseSimpleCode :: String -> Q Exp
+parseSimpleCode code = do
+    let preprocessed = T.unpack $ T.replace "?" "__implicit_" $ T.pack code
+    case parseExp preprocessed of
+        Right exp -> return (transformExp exp)
+        Left err -> fail $ "Parse error in LURK `{}` block: " ++ err ++ "\nCode: " ++ code
+
 -- | Converts the parsed chunks into a single Template Haskell Expression.
 parseLurkExp :: String -> Q Exp
 parseLurkExp input = do
@@ -43,65 +87,6 @@ parseLurkExp input = do
             
             listExp <- listE (map toExpChunk chunks)
             appE (varE 'concatHtml) (return listExp)
-
--- | Extracts balanced parentheses
-extractParens :: String -> Int -> String -> (String, String)
-extractParens [] _ acc = (reverse acc, [])
-extractParens (c:cs) p acc
-    | c == '(' = extractParens cs (p+1) (c:acc)
-    | c == ')' = if p == 1 then (reverse acc, cs) else extractParens cs (p-1) (c:acc)
-    | c == '"' = 
-        let (str, rest) = break (== '"') cs
-        in if null rest then extractParens rest p (reverse ("\"" ++ str) ++ acc)
-           else extractParens (tail rest) p (reverse ("\"" ++ str ++ "\"") ++ acc)
-    | otherwise = extractParens cs p (c:acc)
-
-nextToken :: String -> (String, String)
-nextToken "" = ("", "")
-nextToken (c:cs)
-    | c == '"' = 
-        let (str, rest) = break (== '"') cs
-        in if null rest then ("\"" ++ str, "") else ("\"" ++ str ++ "\"", tail rest)
-    | c == '(' =
-        let (inside, rest) = extractParens cs 1 ""
-        in ("(" ++ inside ++ ")", rest)
-    | otherwise = 
-        let (w, rest) = span (\x -> x /= ' ' && x /= '(' && x /= '"') (c:cs)
-        in (w, rest)
-
-tokenize :: String -> [String]
-tokenize [] = []
-tokenize s = 
-    let s' = dropWhile (== ' ') s
-    in if null s' then []
-       else let (tok, rest) = nextToken s'
-            in tok : tokenize rest
-
-splitByDot :: String -> [String]
-splitByDot "" = []
-splitByDot s = 
-    let (w, rest) = break (== '.') s
-    in w : if null rest then [] else splitByDot (tail rest)
-
-parseToken :: String -> Q Exp
-parseToken "" = stringE ""
-parseToken s
-    | head s == '"' && last s == '"' = litE (stringL (init (tail s)))
-    | head s == '(' && last s == ')' = parseSimpleCode (init (tail s))
-    | '.' `elem` s = 
-        let parts = splitByDot s
-        in foldl (\acc field -> appE (varE (mkName field)) acc) (varE (mkName (head parts))) (tail parts)
-    | head s == '?' = implicitParamVarE (tail s)
-    | otherwise = varE (mkName s)
-
--- | A smarter Haskell parser that handles function application, parens, 
--- string literals, and translates `a.b` into `b a`.
-parseSimpleCode :: String -> Q Exp
-parseSimpleCode code = 
-    case tokenize code of
-        [] -> stringE ""
-        [singleToken] -> parseToken singleToken
-        (f:args) -> foldl appE (parseToken f) (map parseToken args)
 
 -- | The LURK QuasiQuoter!
 lurk :: QuasiQuoter
