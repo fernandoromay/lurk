@@ -47,23 +47,23 @@ defaultSEO = SEO
 
 renderSEO :: SEO -> Html
 renderSEO seo = [lurk|
-    <title>{seo.title}</title>
-    <meta name="title" content="{seo.metaTitle}">
-    <meta name="description" content="{seo.metaDescription}">
-    {renderCanonical seo.canonical}
-    {renderAlternates seo.alternates}
-    {renderOgTitle seo.ogTitle}
-    {renderOgDescription seo.ogDescription}
-    {renderOgType seo.ogType}
-    {renderOgImage seo.ogImage}
-    {seo.customTags}
+    <title>{title seo}</title>
+    <meta name="title" content="{metaTitle seo}">
+    <meta name="description" content="{metaDescription seo}">
+    {renderCanonical (canonical seo)}
+    {renderAlternates (alternates seo)}
+    {renderOgTitle (ogTitle seo)}
+    {renderOgDescription (ogDescription seo)}
+    {renderOgType (ogType seo)}
+    {renderOgImage (ogImage seo)}
+    {customTags seo}
 |]
   where
     renderCanonical (Just c) = [lurk|<link rel="canonical" href="{c}">|]
     renderCanonical Nothing  = mempty
 
     renderAlternates = concatHtml . map (\a ->
-        [lurk|<link rel="alternate" hreflang="{a.hreflang}" href="{a.href}">|])
+        [lurk|<link rel="alternate" hreflang="{hreflang a}" href="{href a}">|])
 
     renderOgTitle (Just t) = [lurk|<meta property="og:title" content="{t}">|]
     renderOgTitle Nothing  = mempty
