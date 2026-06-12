@@ -91,6 +91,7 @@ parseToken s
     | '.' `elem` s = 
         let parts = splitByDot s
         in foldl (\acc field -> appE (varE (mkName field)) acc) (varE (mkName (head parts))) (tail parts)
+    | head s == '?' = implicitParamVarE (tail s)
     | otherwise = varE (mkName s)
 
 -- | A smarter Haskell parser that handles function application, parens, 

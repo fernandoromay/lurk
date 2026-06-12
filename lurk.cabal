@@ -14,6 +14,7 @@ library
                         QuasiQuotes
                         TemplateHaskell
                         DuplicateRecordFields
+                        ImplicitParams
     hs-source-dirs:   .
 
     exposed-modules:  Lurk.Prelude
@@ -23,7 +24,7 @@ library
                       Lurk.Assets
                       Lurk.SEO
 
-    build-depends:    base ^>=4.17.2.1,
+    build-depends:    base >=4.17.2.1,
                       scotty,
                       text,
                       containers,
@@ -32,11 +33,14 @@ library
                       template-haskell,
                       directory,
                       filepath,
-                      time
+                      time,
+                      wai,
+                      bytestring
 
 executable lurk
     default-language: GHC2021
     default-extensions: OverloadedStrings
+    ghc-options:      -threaded -rtsopts -with-rtsopts=-N
     main-is:          Main.hs
     hs-source-dirs:   cli
     build-depends:    base ^>=4.17.2.1,
