@@ -165,3 +165,61 @@ GitHub Secrets → GitHub Action → SSH → Server → systemd restart
 ```
 
 No secrets in Git. No framework opinions about what secrets exist.
+
+## `Lurk.Language` / Project Language Scaffolding
+
+Projects using Lurk for multi-language sites define their own `Language` enum:
+
+```haskell
+data Language = EN | ES | KO
+    deriving (Eq, Enum, Bounded)
+```
+
+Lurk could own the *pattern* (and provide helpers) without owning the *values* (which are project-specific). Two possible directions:
+
+### Option A — Typeclass
+
+```haskell
+class LurkLanguage lang where
+    defaultLanguage :: lang
+    allLanguages    :: [lang]
+    langCode        :: lang -> Text   -- "en", "es", "ko"
+    langName        :: lang -> Text   -- "English", "Español"
+```
+
+Projects implement the instance. Lurk helpers (`getForLangs`, future route generators) are constrained on `LurkLanguage lang`.
+
+### Option B — Code Generator
+
+```
+lurk init language EN ES KO
+```
+
+Generates `Language.hs` with the enum, `Show` instance, `allLanguages`, `langCode`, and `langName`. No typeclass needed — the file is the contract. Works for the majority of projects where languages are set at init time and rarely change.
+
+**Option B is simpler and better DX** for the target audience (developers coming from PHP/Laravel). No typeclass complexity; the scaffold is the convention.
+
+Not a v1 priority. The current approach (`Language.hs` as a project-level file) works well and can be replaced by this scaffold when the CLI generator is ready.
+
+---
+
+## Default Error Views
+
+Lurk could ship a default `error404View` and `error500View` in a `Lurk.Views` module, allowing projects to get a working error page with zero boilerplate:
+
+```haskell
+-- Lurk.Views
+error404View :: (?currentPath :: Text) => Html
+error500View :: (?currentPath :: Text) => Html
+```
+
+Projects that want custom branding/language override by not calling `notFound notFoundAction` from Lurk and defining their own.
+
+The default views would use no locale system — just hardcoded English strings — since Lurk doesn't know the project's `Language` type.
+
+Not a v1 priority. Projects should define `Locales/Error.hs` and their own error view in the meantime.
+---
+
+## Page / Route ADT
+
+A type-safe route ADT (`data Page = Home | Pricing | ...`) could live in Lurk and be provided to projects as a scaffold, with compile-time exhaustiveness checking. This would allow the framework to generate localized path helpers automatically and ensure that all routes are handled in the router.
