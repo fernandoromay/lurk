@@ -55,12 +55,26 @@ updateCabalModules = do
 
 discoverModules :: IO [String]
 discoverModules = do
-    let srcDirs = ["Application", "Config", "Controller", "Locales", "Types", "View"]
+    -- 1. Find all root-level directories that start with a capital letter
+    allFiles <- listDirectory "."
+    srcDirs <- filterM (\d -> do
+        isDir <- doesDirectoryExist d
+        let isCap = not (null d) && (head d >= 'A' && head d <= 'Z')
+        return (isDir && isCap)
+        ) allFiles
+    
+    -- 2. Scan those directories recursively
     subDirModules <- concat <$> mapM scanDir srcDirs
     
-    let rootFiles = ["Routes.hs", "Types.hs"]
-    rootExists <- filterM doesFileExist rootFiles
-    let rootMods = map dropExtension rootExists
+    -- 3. Find root-level .hs files (excluding Main.hs)
+    rootHsFiles <- filterM (\f -> do
+        isFile <- doesFileExist f
+        let isHs = ".hs" `isSuffixOf` f
+        let isNotMain = takeFileName f /= "Main.hs"
+        return (isFile && isHs && isNotMain)
+        ) allFiles
+    
+    let rootMods = map dropExtension rootHsFiles
     
     return $ sort (subDirModules ++ rootMods)
 
