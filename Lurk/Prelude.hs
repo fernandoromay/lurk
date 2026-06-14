@@ -1,55 +1,53 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ImplicitParams #-}
 module Lurk.Prelude
-  ( module Prelude,
-    Text,
-    Map,
-    liftIO,
-    ActionM,
-    ScottyM,
-    scotty,
-    get,
-    post,
-    captureParam,
-    queryParam,
-    formParam,
-    lurk,
-    renderHtml,
-    renderView,
-    Html,
-    ToHtml (..),
-    asset,
-    mkAssetPath,
-    getRoute,
-    postRoute,
-    currentPath,
-    activeClass,
-    trailingSlash,
-    middleware,
-    notFound,
-    module Lurk.SEO,
-  )
-where
+    ( module Prelude
+    , Text
+    , Map
+    , liftIO
+    , Action
+    , captureParam
+    , queryParam
+    , formParam
+    , lurk
+    , renderHtml
+    , render
+    , Html
+    , ToHtml (..)
+    , asset
+    , mkAssetPath
+    , currentPath
+    , activeClass
+    , trailingSlash
+    , notFound
+    , module Lurk.SEO
+    -- Lurk.App
+    , LurkApp
+    , runLurk
+    , routeSettings
+    , getPage
+    , getPages
+    , postAction
+    , RouteOption (..)
+    ) where
 
 import Control.Monad.IO.Class (liftIO)
 import Data.Map (Map)
 import Data.Text (Text)
--- Our own custom HSX engine
-
 import Data.Text.Lazy qualified as TL
 import Lurk.Assets (asset, mkAssetPath)
 import Lurk.Html (Html, ToHtml (..), renderHtml)
 import Lurk.QQ (lurk)
--- Routes Handlers
-import Lurk.Routes (activeClass, currentPath, getRoute, postRoute, trailingSlash)
+import Lurk.Routes (activeClass, currentPath, trailingSlash)
 import Lurk.SEO
-import Web.Scotty (ActionM, ScottyM, captureParam, formParam, get, html, middleware, notFound, post, queryParam, scotty)
+import Lurk.App (LurkApp, Action, getPage, getPages, postAction, routeSettings, runLurk, RouteOption(..))
+import Web.Scotty (captureParam, formParam, html, notFound, queryParam)
 import Prelude
 
 -- | Renders LURK Html into a Scotty response
 -- Automatically provides the request path into the implicit parameter `?currentPath`
-renderView :: ((?currentPath :: Text) => Html) -> ActionM ()
-renderView viewHtml = do
+render :: ((?currentPath :: Text) => Html) -> Action
+render viewHtml = do
     uri <- currentPath
     let ?currentPath = uri
     html . TL.fromStrict . renderHtml $ viewHtml
