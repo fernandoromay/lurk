@@ -1,11 +1,9 @@
 module Lurk.Routes
-  ( getRoute,
-    postRoute,
-    currentPath,
-    activeClass,
-    trailingSlash,
-  )
-where
+    ( currentPath
+    , activeClass
+    , trailingSlash
+    )
+    where
 
 import Data.ByteString qualified as BS
 import Data.Text qualified as T
