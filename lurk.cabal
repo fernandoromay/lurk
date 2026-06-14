@@ -20,6 +20,7 @@ library
     hs-source-dirs:   .
 
     exposed-modules:  Lurk.Prelude
+                      Lurk.App
                       Lurk.Routes
                       Lurk.Html
                       Lurk.QQ
@@ -40,7 +41,8 @@ library
                       http-types,
                       bytestring,
                       haskell-src-meta,
-                      syb
+                      syb,
+                      wai-middleware-static
 
 executable lurk
     default-language: GHC2021
