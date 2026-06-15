@@ -21,3 +21,4 @@ cabal.sandbox.config
 .tasty-resources/
 .ghc.environment.*
 dist-newstyle/
+AGENTS.md
