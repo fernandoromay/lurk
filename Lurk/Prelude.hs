@@ -50,7 +50,7 @@ import Prelude
 
 -- | Renders LURK Html into a Scotty response
 -- Automatically provides the request path into the implicit parameter `?currentPath`
-render :: ((?currentPath :: Text) => Html) -> Action
+render :: ((?currentPath :: Text) => Html) -> Action ()
 render viewHtml = do
     uri <- currentPath
     let ?currentPath = uri

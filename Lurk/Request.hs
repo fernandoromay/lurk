@@ -39,3 +39,4 @@ cfCountry = do
 resolveLanguage :: [Text] -> [Text] -> Maybe Text
 resolveLanguage supported preferred =
     listToMaybe [ s | p <- preferred, s <- supported, s == p ]
+
