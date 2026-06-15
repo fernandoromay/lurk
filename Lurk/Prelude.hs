@@ -19,6 +19,9 @@ module Lurk.Prelude
     , currentPath
     , activeClass
     , trailingSlash
+    , preferredLanguages
+    , cfCountry
+    , resolveLanguage
     , notFound
     , module Lurk.SEO
     -- Lurk.App
@@ -39,6 +42,7 @@ import Lurk.Assets (asset, mkAssetPath)
 import Lurk.Html (Html, ToHtml (..), renderHtml)
 import Lurk.QQ (lurk)
 import Lurk.Routes (activeClass, currentPath, trailingSlash)
+import Lurk.Request (preferredLanguages, cfCountry, resolveLanguage)
 import Lurk.SEO
 import Lurk.App (LurkApp, Action, getPage, getPages, postAction, routeSettings, runLurk, RouteOption(..))
 import Web.Scotty (captureParam, formParam, html, notFound, queryParam)

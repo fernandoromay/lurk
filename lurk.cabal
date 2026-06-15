@@ -21,8 +21,9 @@ library
 
     exposed-modules:  Lurk.Prelude
                       Lurk.App
-                      Lurk.Routes
-                      Lurk.Html
+                       Lurk.Routes
+                       Lurk.Request
+                       Lurk.Html
                       Lurk.QQ
                       Lurk.Assets
                       Lurk.SEO
