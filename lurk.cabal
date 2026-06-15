@@ -21,11 +21,12 @@ library
 
     exposed-modules:  Lurk.Prelude
                       Lurk.App
-                       Lurk.Routes
-                       Lurk.Request
-                       Lurk.Html
-                      Lurk.QQ
                       Lurk.Assets
+                      Lurk.Html
+                      Lurk.Language
+                      Lurk.QQ
+                      Lurk.Routes
+                      Lurk.Request
                       Lurk.SEO
 
     build-depends:    base >=4.17.2.1,
