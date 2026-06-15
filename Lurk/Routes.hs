@@ -13,12 +13,6 @@ import Network.Wai (rawPathInfo, rawQueryString, responseBuilder)
 import Network.Wai qualified as Wai
 import Web.Scotty
 
-getRoute :: T.Text -> ActionM () -> ScottyM ()
-getRoute path = get (literal $ T.unpack path)
-
-postRoute :: T.Text -> ActionM () -> ScottyM ()
-postRoute path = post (literal $ T.unpack path)
-
 currentPath :: ActionM T.Text
 currentPath = TE.decodeUtf8 . rawPathInfo <$> request
 
@@ -27,8 +21,8 @@ activeClass uri target
   | target `T.isPrefixOf` uri = "active"
   | otherwise = ""
 
--- | Wai middleware that enforces trailing slashes on page routes via 301.
--- Paths with a file extension (static assets) are passed through unchanged.
+-- Enforce trailing slashes on page routes via 301
+-- Paths with a file extension are passed through unchanged
 trailingSlash :: Wai.Middleware
 trailingSlash app req respond
     | needsSlash = respond $ responseBuilder status301 [("Location", redirectTo)] mempty
@@ -41,5 +35,5 @@ trailingSlash app req respond
     needsSlash = method `elem` ["GET", "HEAD"]
                  && not isAsset
                  && not (BS.null rawPath)
-                 && BS.last rawPath /= 47         -- doesn't already end in '/'
+                 && BS.last rawPath /= 47
     redirectTo = rawPath <> "/" <> rawQueryString req
