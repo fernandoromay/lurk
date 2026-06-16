@@ -22,6 +22,7 @@ library
     exposed-modules:  Lurk.Prelude
                       Lurk.App
                       Lurk.Assets
+                      Lurk.Cookie
                       Lurk.Html
                       Lurk.Language
                       Lurk.QQ
