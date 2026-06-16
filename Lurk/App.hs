@@ -7,13 +7,32 @@ module Lurk.App
     , getPage
     , getPages
     , postAction
+    , getStore
     ) where
 
+import Control.Concurrent.STM (TVar, newTVarIO, readTVarIO, atomically, writeTVar)
 import Data.Text (Text)
 import qualified Data.Text as T
+import System.IO.Unsafe (unsafePerformIO)
 import Lurk.Routes (trailingSlash)
+import Lurk.Session (SessionStore, newSessionStore)
+import Lurk.SessionMiddleware (sessionMiddleware)
+import Lurk.CSRF (csrfMiddleware)
 import Network.Wai.Middleware.Static (staticPolicy, addBase)
 import Web.Scotty (ScottyM, ActionM, middleware, scotty, get, post, literal)
+
+-- | Global store reference (set during startup, read by handlers)
+{-# NOINLINE storeRef #-}
+storeRef :: TVar (Maybe SessionStore)
+storeRef = unsafePerformIO $ newTVarIO Nothing
+
+-- | Get the session store (for use in handlers)
+getStore :: IO SessionStore
+getStore = do
+    ms <- readTVarIO storeRef
+    case ms of
+        Just s -> pure s
+        Nothing -> error "Lurk.App.getStore: session store not initialized"
 
 -- | The application monad.
 type LurkApp = ScottyM ()
@@ -34,7 +53,13 @@ routeSettings = mapM_ apply
 
 -- Start the Lurk application on the given port
 runLurk :: Int -> LurkApp -> IO ()
-runLurk = scotty
+runLurk port app = do
+    store <- newSessionStore
+    atomically $ writeTVar storeRef (Just store)
+    scotty port $ do
+        middleware (sessionMiddleware store)
+        middleware (csrfMiddleware store)
+        app
 
 -- Register a single page
 getPage :: Text -> Action () -> LurkApp

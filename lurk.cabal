@@ -23,12 +23,15 @@ library
                       Lurk.App
                       Lurk.Assets
                       Lurk.Cookie
+                      Lurk.CSRF
                       Lurk.Html
                       Lurk.Language
                       Lurk.QQ
                       Lurk.Routes
                       Lurk.Request
                       Lurk.SEO
+                      Lurk.Session
+                      Lurk.SessionMiddleware
 
     build-depends:    base >=4.17.2.1,
                       scotty,
@@ -45,7 +48,12 @@ library
                       bytestring,
                       haskell-src-meta,
                       syb,
-                      wai-middleware-static
+                      wai-middleware-static,
+                      entropy,
+                      stm,
+                      wai-extra,
+                      cookie,
+                      case-insensitive
 
 executable lurk
     default-language: GHC2021
@@ -58,3 +66,22 @@ executable lurk
                       filepath,
                       text,
                       process
+
+test-suite lurk-tests
+    type:             exitcode-stdio-1.0
+    default-language: GHC2021
+    default-extensions: OverloadedStrings
+    main-is:          Main.hs
+    other-modules:    SessionSpec
+                      CSRFSpec
+    hs-source-dirs:   test
+    ghc-options:      -threaded -rtsopts -with-rtsopts=-N
+    build-depends:    base >=4.17.2.1,
+                      lurk,
+                      tasty,
+                      tasty-hunit,
+                      text,
+                      containers,
+                      time,
+                      entropy,
+                      stm
