@@ -17,14 +17,18 @@ module Lurk.Prelude
     , asset
     , mkAssetPath
     , currentPath
-    , activeClass
+    , isSubpath
     , trailingSlash
     , preferredLanguages
     , cfCountry
     , resolveLanguage
+    , contextValue
+    , getCookie
+    , setCookie
+    , setSimpleCookie
+    , deleteCookie
     , notFound
     , module Lurk.SEO
-    -- Lurk.App
     , LurkApp
     , runLurk
     , routeSettings
@@ -41,17 +45,23 @@ import Data.Text.Lazy qualified as TL
 import Lurk.Assets (asset, mkAssetPath)
 import Lurk.Html (Html, ToHtml (..), renderHtml)
 import Lurk.QQ (lurk)
-import Lurk.Routes (activeClass, currentPath, trailingSlash)
+import Lurk.Routes (isSubpath, currentPath, trailingSlash)
 import Lurk.Request (preferredLanguages, cfCountry, resolveLanguage)
+import Lurk.Cookie (getCookie, setCookie, setSimpleCookie, deleteCookie)
 import Lurk.SEO
 import Lurk.App (LurkApp, Action, getPage, getPages, postAction, routeSettings, runLurk, RouteOption(..))
 import Web.Scotty (captureParam, formParam, html, notFound, queryParam)
 import Prelude
 
+-- | Look up a value in the request context by key
+contextValue :: (?params :: [(Text, Text)]) => Text -> Maybe Text
+contextValue key = lookup key ?params
+
 -- | Renders LURK Html into a Scotty response
--- Automatically provides the request path into the implicit parameter `?currentPath`
-render :: ((?currentPath :: Text) => Html) -> Action ()
-render viewHtml = do
+-- Provides @?currentPath@ and @?params@ as implicit parameters
+render :: ((?currentPath :: Text, ?params :: [(Text, Text)]) => Html) -> [(Text, Text)] -> Action ()
+render viewHtml ctx = do
     uri <- currentPath
     let ?currentPath = uri
+        ?params = ctx
     html . TL.fromStrict . renderHtml $ viewHtml
