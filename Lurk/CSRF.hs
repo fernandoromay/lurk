@@ -5,6 +5,7 @@ module Lurk.CSRF
     , getCsrfToken
     , validateCsrfToken
     , csrfMiddleware
+    , getSessionIdFromHeaders
     ) where
 
 import Control.Concurrent.STM
@@ -106,3 +107,7 @@ parseFormParams body =
         let (k, rest) = BC.break (== '=') pair
             v = BS.drop 1 rest
         in (k, v)
+
+-- | Extract session ID from request headers (set by sessionMiddleware)
+getSessionIdFromHeaders :: Request -> Maybe SessionId
+getSessionIdFromHeaders req = TE.decodeUtf8 <$> lookup sessionHeader (requestHeaders req)

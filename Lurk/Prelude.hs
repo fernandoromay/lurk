@@ -53,6 +53,7 @@ module Lurk.Prelude
     , newCsrfToken
     , getCsrfToken
     , validateCsrfToken
+    , getSessionIdFromHeaders
     ) where
 
 import Control.Monad.IO.Class (liftIO)
@@ -66,7 +67,7 @@ import Lurk.Routes (isSubpath, currentPath, trailingSlash)
 import Lurk.Request (preferredLanguages, cfCountry, resolveLanguage)
 import Lurk.Cookie (getCookie, setCookie, setSimpleCookie, deleteCookie)
 import Lurk.Session (SessionId, Session(..), SessionStore, newSessionStore, getSession, getSessionValue, setSessionValue, deleteSessionValue, newSessionId, cleanupSessions)
-import Lurk.CSRF (CsrfToken, newCsrfToken, getCsrfToken, validateCsrfToken)
+import Lurk.CSRF (CsrfToken, newCsrfToken, getCsrfToken, validateCsrfToken, getSessionIdFromHeaders)
 import Lurk.SEO
 import Lurk.App (LurkApp, Action, getPage, getPages, postAction, routeSettings, runLurk, RouteOption(..), getStore)
 import Web.Scotty (captureParam, formParam, html, notFound, queryParam)
