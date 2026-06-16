@@ -1,4 +1,4 @@
-module Lurk.SessionMiddleware
+module Lurk.Session.Middleware
     ( sessionMiddleware
     ) where
 

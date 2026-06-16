@@ -16,7 +16,7 @@ import qualified Data.Text as T
 import System.IO.Unsafe (unsafePerformIO)
 import Lurk.Routes (trailingSlash)
 import Lurk.Session (SessionStore, newSessionStore)
-import Lurk.SessionMiddleware (sessionMiddleware)
+import Lurk.Session.Middleware (sessionMiddleware)
 import Lurk.CSRF (csrfMiddleware)
 import Network.Wai.Middleware.Static (staticPolicy, addBase)
 import Web.Scotty (ScottyM, ActionM, middleware, scotty, get, post, literal)

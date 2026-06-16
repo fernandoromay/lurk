@@ -31,7 +31,7 @@ library
                       Lurk.Request
                       Lurk.SEO
                       Lurk.Session
-                      Lurk.SessionMiddleware
+                      Lurk.Session.Middleware
 
     build-depends:    base >=4.17.2.1,
                       scotty,
