@@ -21,6 +21,10 @@ instance FromJSON DockerConfig
 data DockerProvider = DockerProvider DockerConfig
 
 instance DeployProvider DockerProvider where
+    setup _ = do
+        putStrLn "Docker setup: Ensuring image exists..."
+        pure $ Right ()
+
     validate _ = do
         putStrLn "Validating docker environment..."
         pure $ Right ()
@@ -30,9 +34,10 @@ instance DeployProvider DockerProvider where
         callProcess "docker" ["build", "-t", registry cfg ++ ":" ++ tag cfg, "-f", dockerfile cfg, "--build-arg", "ENV_FILE=.env", "."]
         -- Tag as latest for transfer
         callProcess "docker" ["tag", registry cfg ++ ":" ++ tag cfg, registry cfg ++ ":latest"]
-        pure $ Right ()
+        -- Return a dummy path because Docker doesn't use a binary path in transfer
+        pure $ Right "docker-image"
 
-    transfer (DockerProvider cfg) _ = do
+    transfer (DockerProvider cfg) _ _ = do
         putStrLn "Preparing backup in registry..."
         -- Pull existing latest to tag as previous
         _ <- readProcessWithExitCode "docker" ["pull", registry cfg ++ ":latest"] ""
