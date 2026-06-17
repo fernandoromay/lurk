@@ -32,8 +32,13 @@ library
                       Lurk.SEO
                       Lurk.Session
                       Lurk.Session.Middleware
+                      Lurk.Deploy
+                      Lurk.Deploy.SSH
+                      Lurk.Deploy.Docker
+                      Lurk.Deploy.Shell
 
-    build-depends:    base >=4.17.2.1,
+    build-depends:
+                      base >=4.17.2.1,
                       scotty,
                       text,
                       containers,
@@ -53,7 +58,12 @@ library
                       stm,
                       wai-extra,
                       cookie,
-                      case-insensitive
+                      case-insensitive,
+                      aeson,
+                      yaml,
+                      process,
+                      temporary,
+                      process
 
 executable lurk
     default-language: GHC2021
@@ -65,7 +75,14 @@ executable lurk
                       directory,
                       filepath,
                       text,
-                      process
+                      process,
+                      aeson,
+                      yaml,
+                      bytestring,
+                      containers,
+                      temporary,
+                      lurk,
+                      ansi-terminal
 
 test-suite lurk-tests
     type:             exitcode-stdio-1.0
