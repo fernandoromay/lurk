@@ -70,6 +70,7 @@ executable lurk
     default-extensions: OverloadedStrings
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
     main-is:          Main.hs
+    other-modules:    Log
     hs-source-dirs:   cli
     build-depends:    base ^>=4.17.2.1,
                       directory,
