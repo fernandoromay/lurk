@@ -106,10 +106,7 @@ generateWorkflowYaml provider keys ghcVer cabalVer =
          , ""
          , "      # --- Build the Lurk CLI and Binary ---"
          , "      - name: Build"
-         , "        run: |"
-         , "          cd lib/lurk"
-         , "          cabal update"
-         , "          cabal build lurk --minimize"
+         , "        run: cabal build lurk --minimize"
          , ""
          , "      # --- Secrets Injection & Deployment ---"
          , "      - name: Deploy"
@@ -133,8 +130,6 @@ generateWorkflowYaml provider keys ghcVer cabalVer =
         , "          ssh-keyscan -H $VPS_IP >> ~/.ssh/known_hosts"
         , ""
          , "          # Execute Lurk Deployment"
-         , "          cp ../lurk.yaml ."
-         , "          cd lib/lurk"
          , "          cabal run lurk -- deploy"
         ]
     providerSteps "docker" = 
@@ -148,8 +143,6 @@ generateWorkflowYaml provider keys ghcVer cabalVer =
         , "          echo \"$DOCKER_PASSWORD\" | docker login -u \"$DOCKER_USERNAME\" --password-stdin"
         , ""
          , "          # Execute Lurk Deployment"
-         , "          cp ../lurk.yaml ."
-         , "          cd lib/lurk"
          , "          cabal run lurk -- deploy"
         ]
     providerSteps _ = 
@@ -157,8 +150,6 @@ generateWorkflowYaml provider keys ghcVer cabalVer =
         , "          # -----------------------------------------------"
         , "        run: |"
          , "          # Execute Lurk Deployment"
-         , "          cp ../lurk.yaml ."
-         , "          cd lib/lurk"
          , "          cabal run lurk -- deploy"
         ]
 
