@@ -43,14 +43,18 @@ parseSessionCookie req = do
     let cookies = parseCookiesSimple cookieHeader
     TE.decodeUtf8 <$> lookup "_session_id" cookies
 
--- | Simple cookie parser: splits on "; " and "="
+-- | Simple cookie parser: splits on "; "
 parseCookiesSimple :: BC.ByteString -> [(BC.ByteString, BC.ByteString)]
 parseCookiesSimple "" = []
 parseCookiesSimple bs =
     let pairs = splitOn ';' bs
-        trimmed = map (fmap (BC.dropWhile (== ' ')) . BC.break (== '=')) pairs
+        trimmed = map parsePair pairs
     in [(k, v) | (k, v) <- trimmed, not (BC.null k)]
   where
+    parsePair pair =
+        let (k, rest) = BC.break (== '=') pair
+            v = BC.drop 1 rest  -- drop the '=' separator
+        in (BC.dropWhile (== ' ') k, v)
     splitOn _ "" = [""]
     splitOn c s =
         let (chunk, rest) = BC.break (== c) s
@@ -73,6 +77,7 @@ newSessionAndContinue store app req respond = do
             , sessionExpiry = addUTCTime 86400 now
             }
     atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
+    persistSession store sess
     let req' = req { requestHeaders = (sessionHeader, TE.encodeUtf8 sid) : requestHeaders req }
     let cookieVal = BC.pack $ T.unpack $ "_session_id=" <> sid <> "; Path=/; SameSite=Lax; HttpOnly"
     let respond' resp = respond $ Wai.mapResponseHeaders (("Set-Cookie", cookieVal) :) resp

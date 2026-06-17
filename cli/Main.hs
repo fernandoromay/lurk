@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import System.Environment (getArgs)
+import System.Environment (getArgs, lookupEnv, setEnv)
 import System.Process (callProcess, rawSystem)
 import System.Directory
 import System.FilePath
@@ -28,15 +28,39 @@ killPort port = do
 
 runProject :: IO ()
 runProject = do
+    loadDotEnv
     updateCabalModules
     putStrLn "Starting LURK dev server..."
     callProcess "cabal" ["run"]
 
 buildProject :: IO ()
 buildProject = do
+    loadDotEnv
     updateCabalModules
     putStrLn "Building project..."
     callProcess "cabal" ["build"]
+
+-- | Load .env file if it exists, setting env vars only if not already set
+loadDotEnv :: IO ()
+loadDotEnv = do
+    exists <- doesFileExist ".env"
+    if not exists then pure () else do
+        content <- TIO.readFile ".env"
+        mapM_ (processLine . T.strip) $ T.lines content
+  where
+    processLine line
+        | T.null line = pure ()
+        | "--" `T.isPrefixOf` line = pure ()
+        | otherwise = case T.breakOn "=" line of
+            (key, val)
+                | T.null key -> pure ()
+                | otherwise -> do
+                    let k = T.unpack (T.strip key)
+                        v = T.unpack (T.strip (T.drop 1 val))
+                    existing <- lookupEnv k
+                    case existing of
+                        Just _ -> pure ()  -- don't override existing env vars
+                        Nothing -> setEnv k v
 
 updateCabalModules :: IO ()
 updateCabalModules = do

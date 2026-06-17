@@ -223,3 +223,81 @@ Not a v1 priority. Projects should define `Locales/Error.hs` and their own error
 ## Page / Route ADT
 
 A type-safe route ADT (`data Page = Home | Pricing | ...`) could live in Lurk and be provided to projects as a scaffold, with compile-time exhaustiveness checking. This would allow the framework to generate localized path helpers automatically and ensure that all routes are handled in the router.
+
+---
+
+## Sessions & CSRF (partially implemented)
+
+### Done
+
+- `Lurk.Session` — InMemoryStore (TVar) + FileStore (persisted to `.lurk-sessions/`), newSessionId (entropy), get/set/delete, cleanup
+- `Lurk.Session.Middleware` — WAI middleware for `_session_id` cookie lifecycle, passes session ID via internal `X-Lurk-Session-Id` header
+- `Lurk.CSRF` — token generation (32 bytes hex), synchronizer token validation, WAI middleware for POST/PUT/DELETE, form body caching via global TVar (keyed by session ID) for handlers that need re-reading the consumed request body
+- `Lurk.App` — `runLurk` creates FileStore, wires session + CSRF middleware, `getSessionIdFromHeaders` helper
+
+### Remaining
+
+1. **Flash messages** — one-time session data for success/error feedback
+2. **Session-based auth** — login/logout, user roles
+3. **Token rotation** — regenerate on privilege change
+4. **Redis store** — for horizontal scaling
+5. **Session fixation protection** — regenerate ID on login
+6. **CSRF exemptions** — exclude specific routes (webhooks, APIs)
+7. **Secure flag in dev** — disable Secure cookie flag when not on HTTPS
+
+## `Lurk.Form` — Reusable Form Processing Pipeline
+
+After building form handlers in a real project (access request, enterprise
+inquiry), a clear pattern emerged. The same steps repeat for every form POST:
+
+1. Read cached form params from CSRF middleware's TVar cache
+2. Validate time-to-submit (anti-bot, minimum N seconds since page load)
+3. Check honeypot field (if filled → redirect to 404)
+4. Verify email domain has MX records (DNS check)
+5. Run business logic (scoring, logging, email sending)
+6. Redirect to thank-you page
+
+Steps 1–4 and 6 are identical across forms. Only step 5 varies.
+
+### Proposed API
+
+```haskell
+module Lurk.Form
+    ( FormConfig(..)
+    , FormResult(..)
+    , processForm
+    ) where
+
+data FormConfig = FormConfig
+    { fcStore         :: SessionStore
+    , fcHoneypotField :: Text              -- e.g. "b_website"
+    , fcMinSeconds    :: Int               -- e.g. 3
+    , fcRedirect      :: Text              -- e.g. "/thanks/"
+    , fcHandler       :: [(Text,Text)] -> Action ()  -- business logic
+    }
+
+-- | Run the full form pipeline: cache read → honeypot → time check →
+-- MX check → handler → redirect. The handler receives cleaned params.
+processForm :: FormConfig -> Action ()
+```
+
+### What it does NOT own
+
+- **Email sending** — too project-specific (templates, SMTP config, recipients)
+- **Lead scoring** — business logic, not a framework concern
+- **Logging format** — project decides what to log and where
+- **Field validation** — too varied (some forms need phone validation, others
+  don't); Lurk provides the anti-abuse layer, projects handle field-level
+  validation
+
+### Why this matters
+
+Every Lurk project that adds a form ends up copy-pasting the same anti-abuse
+checks (honeypot, time-to-submit, MX verification) and CSRF param extraction.
+A `Lurk.Form` module eliminates that duplication while keeping business logic
+in the project where it belongs.
+
+The key insight: the framework should own **security and infrastructure**
+(honeypot, rate limiting, CSRF, session management) while the project owns
+**business logic** (what to do with the data). `Lurk.Form` draws that line
+cleanly.

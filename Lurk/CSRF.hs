@@ -72,13 +72,18 @@ bytesToHex = BS.concatMap (\b -> BC.pack [hexChar (b `div` 16), hexChar (b `mod`
 
 -- | Store CSRF token in session under "csrf_token" key
 setCsrfToken :: SessionStore -> SessionId -> CsrfToken -> IO ()
-setCsrfToken store sid token = atomically $ do
-    sessions <- readTVar (storeSessions store)
-    case Map.lookup sid sessions of
-        Just sess -> do
-            let updated = sess { sessionData = Map.insert "csrf_token" token (sessionData sess) }
-            writeTVar (storeSessions store) (Map.insert sid updated sessions)
-        Nothing -> pure ()
+setCsrfToken store sid token = do
+    mSess <- atomically $ do
+        sessions <- readTVar (storeSessions store)
+        case Map.lookup sid sessions of
+            Just sess -> do
+                let updated = sess { sessionData = Map.insert "csrf_token" token (sessionData sess) }
+                writeTVar (storeSessions store) (Map.insert sid updated sessions)
+                pure (Just updated)
+            Nothing -> pure Nothing
+    case mSess of
+        Just sess -> persistSession store sess
+        Nothing   -> pure ()
 
 -- | Get CSRF token from session, generating and storing one if missing
 getCsrfToken :: SessionStore -> SessionId -> IO CsrfToken
@@ -114,7 +119,6 @@ csrfMiddleware store app req respond = do
             let mSid = TE.decodeUtf8 <$> lookup sessionHeader (requestHeaders req)
             case (mSid, mSubmitted) of
                 (Just sid, Just submitted) -> do
-                    -- Cache the parsed form body for handlers
                     cacheFormBody sid params
                     sessions <- readTVarIO (storeSessions store)
                     case Map.lookup sid sessions of

@@ -15,7 +15,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import System.IO.Unsafe (unsafePerformIO)
 import Lurk.Routes (trailingSlash)
-import Lurk.Session (SessionStore, newSessionStore)
+import Lurk.Session (SessionStore, newFileSessionStore)
 import Lurk.Session.Middleware (sessionMiddleware)
 import Lurk.CSRF (csrfMiddleware)
 import Network.Wai.Middleware.Static (staticPolicy, addBase)
@@ -54,7 +54,7 @@ routeSettings = mapM_ apply
 -- Start the Lurk application on the given port
 runLurk :: Int -> LurkApp -> IO ()
 runLurk port app = do
-    store <- newSessionStore
+    store <- newFileSessionStore ".lurk-sessions"
     atomically $ writeTVar storeRef (Just store)
     scotty port $ do
         middleware (sessionMiddleware store)

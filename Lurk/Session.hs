@@ -4,12 +4,14 @@ module Lurk.Session
     , Session(..)
     , SessionStore(..)
     , newSessionStore
+    , newFileSessionStore
     , getSession
     , getSessionValue
     , setSessionValue
     , deleteSessionValue
     , newSessionId
     , cleanupSessions
+    , persistSession
     ) where
 
 import Control.Concurrent (forkIO, threadDelay)
@@ -17,6 +19,8 @@ import Control.Concurrent.STM
 import Control.Monad.IO.Class (liftIO)
 import Data.Bits (shiftR, (.&.))
 import Data.ByteString qualified as BS
+import Data.ByteString.Char8 qualified as BC
+import Data.CaseInsensitive qualified as CI
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -25,6 +29,9 @@ import Data.Text.Encoding qualified as TE
 import Data.Time.Clock (UTCTime, addUTCTime, getCurrentTime)
 import Data.Word (Word8)
 import System.Entropy (getEntropy)
+import System.Directory (doesDirectoryExist, createDirectoryIfMissing, doesFileExist, removeFile, listDirectory)
+import System.FilePath ((</>))
+import Network.Wai (Request(..))
 import Web.Scotty (ActionM, getCookie, setHeader, request)
 import qualified Web.Scotty as Scotty
 
@@ -36,16 +43,101 @@ data Session = Session
     , sessionExpiry :: UTCTime
     }
 
-data SessionStore = InMemoryStore
-    { storeSessions :: TVar (Map SessionId Session)
-    , storeTTL      :: Int  -- seconds
-    }
+data SessionStore
+    = InMemoryStore
+        { storeSessions :: TVar (Map SessionId Session)
+        , storeTTL      :: Int
+        }
+    | FileStore
+        { storeSessions :: TVar (Map SessionId Session)
+        , storeTTL      :: Int
+        , storeDir      :: FilePath
+        }
 
 -- | Create a new in-memory session store (24-hour TTL)
 newSessionStore :: IO SessionStore
 newSessionStore = InMemoryStore
     <$> newTVarIO Map.empty
     <*> pure 86400
+
+-- | Create a file-backed session store (24-hour TTL)
+newFileSessionStore :: FilePath -> IO SessionStore
+newFileSessionStore dir = do
+    createDirectoryIfMissing True dir
+    sessions <- loadAllSessions dir
+    store <- FileStore
+        <$> newTVarIO sessions
+        <*> pure 86400
+        <*> pure dir
+    pure store
+
+-- | Load all session files from disk into a Map
+loadAllSessions :: FilePath -> IO (Map SessionId Session)
+loadAllSessions dir = do
+    exists <- doesDirectoryExist dir
+    if not exists then pure Map.empty else do
+        files <- listDirectory dir
+        let sessionFiles = filter (\f -> not (f `elem` [".", ".."])) files
+        now <- getCurrentTime
+        foldM (loadOneSession now dir) Map.empty sessionFiles
+  where
+    loadOneSession now dir acc fileName = do
+        let path = dir </> fileName
+        isFile <- doesFileExist path
+        if not isFile then pure acc else do
+            content <- BC.readFile path
+            case parseSessionFile now (T.pack fileName) content of
+                Just sess
+                    | sessionExpiry sess > now -> pure (Map.insert (sessionId sess) sess acc)
+                    | otherwise -> do
+                        removeFile path  -- clean up expired
+                        pure acc
+                Nothing -> pure acc
+
+-- | Parse a session file. Format: first line is expiry, rest are key=value
+parseSessionFile :: UTCTime -> SessionId -> BS.ByteString -> Maybe Session
+parseSessionFile _ sid content =
+    case BC.lines content of
+        (expiryLine:kvLines) -> do
+            let expiryStr = TE.decodeUtf8 (BC.strip expiryLine)
+            -- Parse ISO format time: "2024-01-15 10:30:00 UTC"
+            expiry <- parseExpiry (T.unpack expiryStr)
+            let kvs = mapMaybe parseKV kvLines
+            pure Session
+                { sessionId     = sid
+                , sessionData   = Map.fromList kvs
+                , sessionExpiry = expiry
+                }
+        [] -> Nothing
+
+parseExpiry :: String -> Maybe UTCTime
+parseExpiry s = readMaybe s
+
+readMaybe :: Read a => String -> Maybe a
+readMaybe s = case reads s of
+    [(x, "")] -> Just x
+    _          -> Nothing
+
+parseKV :: BS.ByteString -> Maybe (Text, Text)
+parseKV line
+    | BC.null line = Nothing
+    | otherwise =
+        let (k, rest) = BC.break (== '=') line
+        in if BC.null rest
+            then Nothing
+            else Just (TE.decodeUtf8 k, TE.decodeUtf8 (BC.drop 1 rest))
+
+mapMaybe :: (a -> Maybe b) -> [a] -> [b]
+mapMaybe _ [] = []
+mapMaybe f (x:xs) = case f x of
+    Just y  -> y : mapMaybe f xs
+    Nothing -> mapMaybe f xs
+
+foldM :: Monad m => (b -> a -> m b) -> b -> [a] -> m b
+foldM _ z [] = pure z
+foldM f z (x:xs) = do
+    z' <- f z x
+    foldM f z' xs
 
 -- | Generate a random 24-byte hex-encoded session ID
 newSessionId :: IO SessionId
@@ -62,11 +154,12 @@ toHexByte b = BS.pack [hexChar hi, hexChar lo]
       | n < 10    = 48 + fromIntegral n       -- '0'..'9'
       | otherwise = 87 + fromIntegral n        -- 'a'..'f'
 
--- | Get session from request cookie, or create a new one
+-- | Get session from request. Uses X-Lurk-Session-Id header (set by session middleware).
+-- Falls back to creating a new session if header is missing.
 getSession :: SessionStore -> ActionM Session
 getSession store = do
-    mCookieId <- getCookie "_session_id"
-    case mCookieId of
+    req <- request
+    case TE.decodeUtf8 <$> lookup (CI.mk "X-Lurk-Session-Id") (requestHeaders req) of
         Just sid -> do
             sessions <- liftIO $ readTVarIO (storeSessions store)
             case Map.lookup sid sessions of
@@ -89,6 +182,7 @@ newSession store = do
             , sessionExpiry = addUTCTime (fromIntegral $ storeTTL store) now
             }
     liftIO $ atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
+    liftIO $ persistSession store sess
     Scotty.setSimpleCookie "_session_id" sid
     pure sess
 
@@ -98,31 +192,58 @@ getSessionValue key Session{..} = Map.lookup key sessionData
 
 -- | Set a value in a session
 setSessionValue :: SessionStore -> SessionId -> Text -> Text -> ActionM ()
-setSessionValue store sid key val = liftIO $ atomically $ do
-    sessions <- readTVar (storeSessions store)
-    case Map.lookup sid sessions of
-        Just sess -> do
-            let updated = sess { sessionData = Map.insert key val (sessionData sess) }
-            writeTVar (storeSessions store) (Map.insert sid updated sessions)
-        Nothing -> pure ()
+setSessionValue store sid key val = liftIO $ do
+    sessions <- atomically $ do
+        sessions <- readTVar (storeSessions store)
+        case Map.lookup sid sessions of
+            Just sess -> do
+                let updated = sess { sessionData = Map.insert key val (sessionData sess) }
+                writeTVar (storeSessions store) (Map.insert sid updated sessions)
+                pure (Just updated)
+            Nothing -> pure Nothing
+    case sessions of
+        Just sess -> persistSession store sess
+        Nothing   -> pure ()
 
 -- | Delete a value from a session
 deleteSessionValue :: SessionStore -> SessionId -> Text -> ActionM ()
-deleteSessionValue store sid key = liftIO $ atomically $ do
-    sessions <- readTVar (storeSessions store)
-    case Map.lookup sid sessions of
-        Just sess -> do
-            let updated = sess { sessionData = Map.delete key (sessionData sess) }
-            writeTVar (storeSessions store) (Map.insert sid updated sessions)
-        Nothing -> pure ()
+deleteSessionValue store sid key = liftIO $ do
+    sessions <- atomically $ do
+        sessions <- readTVar (storeSessions store)
+        case Map.lookup sid sessions of
+            Just sess -> do
+                let updated = sess { sessionData = Map.delete key (sessionData sess) }
+                writeTVar (storeSessions store) (Map.insert sid updated sessions)
+                pure (Just updated)
+            Nothing -> pure Nothing
+    case sessions of
+        Just sess -> persistSession store sess
+        Nothing   -> pure ()
+
+-- | Persist a session to disk (no-op for InMemoryStore)
+persistSession :: SessionStore -> Session -> IO ()
+persistSession InMemoryStore{} _ = pure ()
+persistSession FileStore{..} Session{..} = do
+    let path = storeDir </> T.unpack sessionId
+    let expiryLine = show sessionExpiry
+    let kvLines = map (\(k, v) -> TE.encodeUtf8 k <> "=" <> TE.encodeUtf8 v) $ Map.toList sessionData
+    let content = BC.pack expiryLine <> "\n" <> BC.intercalate "\n" kvLines <> "\n"
+    BS.writeFile path content
 
 -- | Background thread: remove expired sessions every 5 minutes
 cleanupSessions :: SessionStore -> IO ()
 cleanupSessions store = void $ forkIO $ forever $ do
     threadDelay (5 * 60 * 1000000)
     now <- getCurrentTime
-    atomically $ modifyTVar' (storeSessions store) $
-        Map.filter (\sess -> sessionExpiry sess > now)
+    expired <- atomically $ do
+        sessions <- readTVar (storeSessions store)
+        let expired = Map.filter (\sess -> sessionExpiry sess <= now) sessions
+        writeTVar (storeSessions store) (Map.filter (\sess -> sessionExpiry sess > now) sessions)
+        pure expired
+    -- Remove expired session files from disk
+    case store of
+        FileStore{..} -> mapM_ (\sid -> removeFile (storeDir </> T.unpack sid)) (Map.keys expired)
+        _ -> pure ()
   where
     void m = m >> pure ()
     forever a = a >> forever a
