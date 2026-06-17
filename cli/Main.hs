@@ -58,21 +58,27 @@ initDeploy = do
     ghcVer <- init <$> readProcess "ghc" ["--numeric-version"] ""
     cabalVer <- init <$> readProcess "cabal" ["--numeric-version"] ""
     
-    let yaml = generateWorkflowYaml (Map.keys updatedVars) ghcVer cabalVer
+    let yaml = generateWorkflowYaml (Deploy.provider (Deploy.deploy newCfg)) (Map.keys updatedVars) ghcVer cabalVer
     TIO.writeFile ".github/workflows/deploy.yml" (T.pack yaml)
     putStrLn "Generated/Updated .github/workflows/deploy.yml and lurk.yaml"
 
-generateWorkflowYaml :: [String] -> String -> String -> String
-generateWorkflowYaml keys ghcVer cabalVer =
+generateWorkflowYaml :: String -> [String] -> String -> String -> String
+generateWorkflowYaml provider keys ghcVer cabalVer =
     unlines $ 
         [ "# -----------------------------------------------------------------------------"
         , "# Lurk Framework - Automated Deployment Pipeline"
         , "#"
         , "# This workflow is triggered on every push to 'main'."
         , "#"
-        , "# WHAT TO MODIFY:"
-        , "# 1. Update the 'runs-on' field below to match your runner OS."
-        , "# 2. Map the secrets in the 'env' section below."
+        , "# REQUIRED GITHUB SECRETS:"
+        , "# - LURK_YAML:    The full content of your lurk.yaml file."
+        , "# - Provider Secrets:"
+        , "#     - SSH:    DEPLOY_SSH_KEY, VPS_IP"
+        , "#     - Docker: DOCKER_USERNAME, DOCKER_PASSWORD"
+        , "# - App Secrets:  Any keys defined in your lurk.yaml 'env_vars' mapping."
+        , "#"
+        , "# WHAT TO MODIFY IN THIS FILE:"
+        , "# - 'runs-on': Update to match your required runner OS (e.g., ubuntu-latest)."
         , "# -----------------------------------------------------------------------------"
         , ""
         , "name: Deploy Lurk Project"
@@ -93,6 +99,9 @@ generateWorkflowYaml keys ghcVer cabalVer =
         , "          ghc-version: '" ++ ghcVer ++ "'"
         , "          cabal-version: '" ++ cabalVer ++ "'"
         , ""
+        , "      - name: Create Lurk Config"
+        , "        run: echo \"${{ secrets.LURK_YAML }}\" > lurk.yaml"
+        , ""
         , "      # --- Build the Lurk CLI and Binary ---"
         , "      - name: Build"
         , "        run: |"
@@ -104,6 +113,9 @@ generateWorkflowYaml keys ghcVer cabalVer =
         , "        env:"
         , "          # --- PROJECT SPECIFIC: Map your secrets here ---"
         ] ++ map (\k -> "          " ++ k ++ ": ${{ secrets." ++ k ++ " }}") keys ++
+        providerSteps provider
+  where
+    providerSteps "ssh" = 
         [ ""
         , "          # -----------------------------------------------"
         , "          "
@@ -117,6 +129,26 @@ generateWorkflowYaml keys ghcVer cabalVer =
         , "          mkdir -p ~/.ssh"
         , "          ssh-keyscan -H $VPS_IP >> ~/.ssh/known_hosts"
         , ""
+        , "          # Execute Lurk Deployment"
+        , "          cabal run lurk -- deploy"
+        ]
+    providerSteps "docker" = 
+        [ ""
+        , "          # -----------------------------------------------"
+        , "          "
+        , "          # Docker Registry Auth"
+        , "          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}"
+        , "          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}"
+        , "        run: |"
+        , "          echo \"$DOCKER_PASSWORD\" | docker login -u \"$DOCKER_USERNAME\" --password-stdin"
+        , ""
+        , "          # Execute Lurk Deployment"
+        , "          cabal run lurk -- deploy"
+        ]
+    providerSteps _ = 
+        [ ""
+        , "          # -----------------------------------------------"
+        , "        run: |"
         , "          # Execute Lurk Deployment"
         , "          cabal run lurk -- deploy"
         ]
@@ -161,7 +193,7 @@ runDockerDeployment val mEnvContent = do
 
 runDeployment :: Deploy.DeployProvider p => p -> Maybe String -> IO ()
 runDeployment p mEnvContent = do
-    putStrLn "Running deployment pipeline..."
+    Log.logInfo "Running deployment pipeline..."
     
     -- Handle temp .env file
     withSystemTempFile ".env" $ \path h -> do
@@ -171,28 +203,33 @@ runDeployment p mEnvContent = do
         
         let envPath = if isNothing mEnvContent then Nothing else Just path
 
-        res <- Deploy.validate p
-        case res of
-            Left err -> putStrLn $ "Validation failed: " ++ show err
+        resSetup <- Deploy.setup p
+        case resSetup of
+            Left err -> Log.logError $ "Setup failed: " ++ show err
             Right _ -> do
-                resPackage <- Deploy.package p
-                case resPackage of
-                    Left err -> putStrLn $ "Packaging failed: " ++ show err
+                res <- Deploy.validate p
+                case res of
+                    Left err -> Log.logError $ "Validation failed: " ++ show err
                     Right _ -> do
-                        resTransfer <- Deploy.transfer p envPath
-                        case resTransfer of
-                            Left err -> putStrLn $ "Transfer failed: " ++ show err
-                            Right _ -> do
-                                resActivate <- Deploy.activate p
-                                case resActivate of
-                                    Left err -> do
-                                        putStrLn $ "Activation failed: " ++ show err
-                                        putStrLn "Attempting rollback..."
-                                        resRollback <- Deploy.rollback p
-                                        case resRollback of
-                                            Left rErr -> putStrLn $ "Rollback failed: " ++ show rErr
-                                            Right _ -> putStrLn "Rollback successful."
-                                    Right _ -> putStrLn "Deployment successful!"
+                        resPackage <- Deploy.package p
+                        case resPackage of
+                            Left err -> Log.logError $ "Packaging failed: " ++ show err
+                            Right binaryPath -> do
+                                resTransfer <- Deploy.transfer p binaryPath envPath
+                                case resTransfer of
+                                    Left err -> Log.logError $ "Transfer failed: " ++ show err
+                                    Right _ -> do
+                                        resActivate <- Deploy.activate p
+                                        case resActivate of
+                                            Left err -> do
+                                                Log.logError $ "Activation failed: " ++ show err
+                                                Log.logInfo "Attempting rollback..."
+                                                resRollback <- Deploy.rollback p
+                                                case resRollback of
+                                                    Left rErr -> Log.logError $ "Rollback failed: " ++ show rErr
+                                                    Right _ -> Log.logSuccess "Rollback successful."
+                                            Right _ -> Log.logSuccess "Deployment successful!"
+
 
 killPort :: String -> IO ()
 killPort port = do
