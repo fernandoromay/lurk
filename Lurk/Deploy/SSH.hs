@@ -57,7 +57,7 @@ instance DeployProvider SSHProvider where
         
         -- Create backup of existing binary on remote
         putStrLn "Creating remote backup..."
-        _ <- callProcess "ssh" [(user cfg ++ "@" ++ host cfg), "mv " ++ path cfg ++ "/" ++ binaryName ++ " " ++ path cfg ++ "/" ++ binaryName ++ ".bak"]
+        _ <- callProcess "ssh" [(user cfg ++ "@" ++ host cfg), "mv -f " ++ path cfg ++ "/" ++ binaryName ++ " " ++ path cfg ++ "/" ++ binaryName ++ ".bak"]
         
         -- Transfer new binary and public
         callProcess "rsync" ["-avz", binaryPath, "public/", remoteDest ++ "/" ++ binaryName]
