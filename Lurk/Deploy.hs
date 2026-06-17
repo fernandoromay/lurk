@@ -23,9 +23,10 @@ import Control.Monad (filterM)
 
 -- | Interface for different deployment methods
 class DeployProvider p where
+    setup    :: p -> IO (Either DeployError ())
     validate :: p -> IO (Either DeployError ())
-    package  :: p -> IO (Either DeployError ())
-    transfer :: p -> Maybe FilePath -> IO (Either DeployError ())
+    package  :: p -> IO (Either DeployError FilePath)
+    transfer :: p -> FilePath -> Maybe FilePath -> IO (Either DeployError ())
     activate :: p -> IO (Either DeployError ())
     rollback :: p -> IO (Either DeployError ())
 
