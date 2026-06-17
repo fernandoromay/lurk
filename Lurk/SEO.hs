@@ -15,6 +15,7 @@ data SEO = SEO
     { title           :: Text
     , metaTitle       :: Text
     , metaDescription :: Text
+    , robots          :: Maybe Text
     , canonical       :: Maybe Text
     , alternates      :: [Alternate]
     , ogTitle         :: Maybe Text
@@ -36,6 +37,7 @@ defaultSEO = SEO
     , metaDescription = "Search Description. This should be optimized for search engines"
 
     -- Optional fields
+    , robots = Nothing
     , canonical = Nothing
     , alternates = []
     , ogTitle = Nothing
@@ -50,6 +52,7 @@ renderSEO seo = [lurk|
     <title>{title seo}</title>
     <meta name="title" content="{metaTitle seo}">
     <meta name="description" content="{metaDescription seo}">
+    {renderRobots (robots seo)}
     {renderCanonical (canonical seo)}
     {renderAlternates (alternates seo)}
     {renderOgTitle (ogTitle seo)}
@@ -59,6 +62,9 @@ renderSEO seo = [lurk|
     {customTags seo}
 |]
   where
+    renderRobots (Just r) = [lurk|<meta name="robots" content="{r}">|]
+    renderRobots Nothing  = mempty
+
     renderCanonical (Just c) = [lurk|<link rel="canonical" href="{c}">|]
     renderCanonical Nothing  = mempty
 
