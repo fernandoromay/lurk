@@ -45,7 +45,7 @@ instance DeployProvider SSHProvider where
 
     package (SSHProvider cfg) = do
         putStrLn "Packaging project..."
-        callProcess "cabal" ["build", "--minimize"]
+        callProcess "cabal" ["build"]
         -- Dynamically get the binary path
         out <- readProcess "cabal" ["list-bin", service_name cfg] ""
         pure $ Right (init out) -- remove trailing newline
