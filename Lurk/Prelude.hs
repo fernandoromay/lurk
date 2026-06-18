@@ -35,6 +35,7 @@ module Lurk.Prelude
     , getPage
     , getPages
     , postAction
+    , postActions
     , RouteOption (..)
     , getStore
     -- Session
@@ -76,7 +77,7 @@ import Lurk.Session (SessionId, Session(..), SessionStore, newSessionStore, getS
 import Lurk.CSRF (CsrfToken, newCsrfToken, getCsrfToken, validateCsrfToken, getSessionIdFromHeaders, cacheFormBody, lookupCachedFormParam, getCachedFormParams)
 import Lurk.Env (loadEnv, loadEnvFile)
 import Lurk.SEO
-import Lurk.App (LurkApp, Action, getPage, getPages, postAction, routeSettings, runLurk, RouteOption(..), getStore)
+import Lurk.App (LurkApp, Action, getPage, getPages, postAction, postActions, routeSettings, runLurk, RouteOption(..), getStore)
 import Web.Scotty (captureParam, formParam, html, notFound, queryParam)
 import Prelude
 

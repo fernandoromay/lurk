@@ -302,6 +302,154 @@ The key insight: the framework should own **security and infrastructure**
 **business logic** (what to do with the data). `Lurk.Form` draws that line
 cleanly.
 
+## Component Abstraction
+
+Blade has `@include('components.button')`. React has `<Button />`. Lurk has
+functions returning `Html` with no composition mechanism.
+
+Two directions:
+
+### Option A — `@include` in QQ
+
+```haskell
+[lurk|
+@include "components.option-card" { opt = opt, idx = idx }
+|]
+```
+
+The QQ resolves `@include` at compile time, inlining the referenced template.
+No runtime overhead. The included template has access to the same implicit
+parameters.
+
+### Option B — `Lurk.Component` module
+
+```haskell
+component :: Text -> [(Text, Html)] -> Html
+slot :: Text -> Html -> [(Text, Html)]
+```
+
+Projects define components as Haskell functions. Lurk provides the composition
+API. More flexible but more boilerplate.
+
+**Option A is better DX** for the target audience. Blade devs expect `@include`,
+not function composition.
+
+Not a v1 priority. The current approach (Haskell functions) works.
+
+---
+
+## HTML Escaping Fix
+
+`Lurk.Html.toHtml` only escapes `<`, `>`, and `&`. It does not escape `"`, `'`,
+or backtick. This is an XSS risk in attribute contexts:
+
+```haskell
+[lurk|<div class="{userInput}">|]
+-- If userInput is: " onclick="alert(1)
+-- Result: <div class=" " onclick="alert(1)">
+```
+
+**Fix:** Add `T.replace "\"" "&quot;"` and `T.replace "'" "&#39;"` to `toHtml`
+in `Lurk.Html`. One-line change, real security impact.
+
+---
+
+## QQ Error Messages with Line Numbers
+
+When a QQ expression fails to parse, the error is:
+```
+Parse error in LURK {} block: unexpected '<' expecting '}'
+```
+No line number in the template, no suggestion for what went wrong.
+
+The QQ parser already uses megaparsec which tracks `SourcePos`. Exposing
+line/column in the error output is straightforward. The template string
+offset can be mapped back to a line number by counting newlines.
+
+---
+
+## `postActions` Helper
+
+POST routes must be duplicated per language:
+```haskell
+postAction (accessPath EN) (accessPostAction EN)
+postAction (accessPath ES) (accessPostAction ES)
+postAction (accessPath KO) (accessPostAction KO)
+```
+
+`getPages` solves this for GET routes. The same pattern works for POST:
+
+```haskell
+postActions :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
+postActions langs pathFn actionFn =
+    mapM_ (\lang -> postAction (pathFn lang) (actionFn lang)) langs
+```
+
+Three lines of code. Eliminates per-language POST route duplication.
+Naming follows `getPage`/`getPages` → `postAction`/`postActions`.
+
+---
+
+## `Lurk.Opaque` — Bot-Proof Content
+
+A view-level primitive for hiding emails, phone numbers, or any text from
+scrapers. The view decides what gets protected — not invisible middleware.
+
+### API
+
+```haskell
+module Lurk.Opaque
+    ( Opaque
+    , email
+    , phone
+    , opaque
+    , renderOpaque
+    ) where
+
+-- | Opaque content. Plain for humans, encoded for bots.
+newtype Opaque = Opaque Text
+
+-- | Create from a plain email
+email :: Text -> Opaque
+email = Opaque
+
+-- | Create from a plain phone number
+phone :: Text -> Opaque
+phone = Opaque
+
+-- | Create from any text
+opaque :: Text -> Opaque
+opaque = Opaque
+
+-- | Render: True = bot (encoded), False = human (plain)
+renderOpaque :: Bool -> Opaque -> Text
+renderOpaque isBot (Opaque t)
+    | isBot    = T.concatMap (\c -> T.pack $ "&#" ++ show (fromEnum c) ++ ";") t
+    | otherwise = t
+```
+
+### Usage
+
+```haskell
+[lurk|
+<p>Contact {renderOpaque isBot (email "hello@foo.com")}</p>
+<p>Call {renderOpaque isBot (phone "+1-555-0123")}</p>
+|]
+```
+
+The `isBot` flag comes from checking the User-Agent header for common bot
+strings (Googlebot, Bingbot, etc.). The view decides which emails are public
+and which need protection.
+
+### Why not middleware?
+
+Middleware obfuscates everything blindly. `Lurk.Opaque` is a view primitive —
+the developer chooses what to protect. A contact page might show the real
+email to everyone. A footer might protect it. The choice is in the template,
+not invisible infrastructure.
+
+---
+
 ## Deployment & Performance
 
 ### Binary Stripping
@@ -309,3 +457,270 @@ Add a `strip` step to the deployment pipeline to reduce binary size (e.g., from 
 
 ### Remote Build Support
 Investigate optional remote builds on VPS for projects where VPS RAM > 4GB to leverage incremental builds without local GHC/Cabal requirements.
+
+---
+
+## Template System: `{{expr}}` Syntax
+
+### Problem
+The current `{haskell}` interpolation conflicts with CSS `{property: value}` and JS `{key: value}` blocks inside `[lurk|...|]`. Developers must escape or separate styles/scripts.
+
+### Solution
+Change Haskell interpolation to `{{expr}}`:
+```haskell
+[lurk|
+<style>
+.container { display: flex; }
+</style>
+<div class="{{cssClass}}">{{userName}}</div>
+|]
+```
+
+### Implementation
+- Update `Lurk.QQ` parser to recognize `{{` and `}}` as delimiters instead of `{` and `}`
+- Single `{` and `}` become literal text (CSS/JS just works)
+- Backwards incompatible but trivial to migrate (search-replace `{` → `{{` in templates)
+
+---
+
+## Template Control Flow
+
+### `@forEach` / `@forEachIndexed`
+
+```haskell
+[lurk|
+@forEach items as item
+    <div>{{item.name}}</div>
+@end
+
+@forEach items as idx, item indexed
+    <div>{{idx}}. {{item.name}}</div>
+@end
+|]
+```
+
+### `@if` / `@else`
+
+```haskell
+[lurk|
+@if isLoggedIn
+    <a href="/dashboard">Dashboard</a>
+@else
+    <a href="/login">Login</a>
+@end
+|]
+```
+
+### `@case` / `@of`
+
+```haskell
+[lurk|
+@case userRole of
+    @of Admin -> <span>Admin Panel</span>
+    @of User  -> <span>User Dashboard</span>
+    @of Guest -> <span>Public View</span>
+@end
+|]
+```
+
+### Grammar
+
+```
+template     ::= (literal | interpolation | forEach | if | case)*
+interpolation ::= "{{" expr "}}"
+forEach      ::= "@forEach" expr "as" (name | idx "," name "indexed") block
+if           ::= "@if" expr block ("@else" block)? block
+case         ::= "@case" expr "of" alternative+ block
+alternative  ::= "@of" pattern "->" block
+block        ::= template "@end"
+```
+
+### Implementation Notes
+- Parser changes in `Lurk.QQ`: extend `Chunk` data type with new constructors
+- `@forEach` generates `mapM_` or `forM_` in TH
+- `@if` generates `if ... then ... else` in TH
+- `@case` generates `case ... of` in TH
+- All expressions have access to `?currentPath` and `?params` implicit parameters
+
+---
+
+## `Lurk.Cloudflare` — Full Cloudflare Integration
+
+Beyond just `cfCountry`. Typed access to Cloudflare edge primitives:
+
+```haskell
+module Lurk.Cloudflare
+    ( -- | Request headers
+      cfCountry        -- Already exists
+    , cfContinent
+    , cfCity
+    , cfRegion
+    , cfTimezone
+    , cfASN
+    , cfBotScore
+    , cfBotVerified
+      -- | Workers KV (edge caching)
+    , kvGet
+    , kvPut
+    , kvDelete
+      -- | D1 (serverless SQL at edge)
+    , d1Query
+    , d1Execute
+      -- | Images (on-the-fly optimization)
+    , imageResize
+    , imageTransform
+      -- | Turnstile (CAPTCHA replacement)
+    , turnstileVerify
+    ) where
+```
+
+### Why This Matters
+- Cloudflare is the default for modern web apps
+- Typed, safe access to edge primitives from Haskell is a massive DX win
+- No more raw header parsing or REST API calls
+- `turnstileVerify` replaces reCAPTCHA with Cloudflare's Turnstile
+
+---
+
+## `Lurk.Mail` — Email Abstraction
+
+Current `Controller/Form.hs` has raw SMTP socket code. Lurk should own this:
+
+```haskell
+module Lurk.Mail
+    ( MailConfig(..)
+    , MailMessage(..)
+    , sendMail
+    ) where
+
+data MailConfig
+    = SMTPConfig { smtpHost, smtpUser, smtpPass :: Text, smtpPort :: Int }
+    | SendGridConfig { apiKey :: Text }
+    | ResendConfig { apiKey :: Text }
+
+data MailMessage = MailMessage
+    { from    :: Text
+    , to      :: [Text]
+    , subject :: Text
+    , body    :: Text
+    }
+
+sendMail :: MailConfig -> MailMessage -> IO (Either MailError ())
+```
+
+### Why
+Every web app sends emails. Lurk shouldn't make developers write raw SMTP sockets.
+
+---
+
+## `Lurk.Auth` — Session-Based Authentication
+
+Extend existing session system with auth primitives:
+
+```haskell
+module Lurk.Auth
+    ( User(..)
+    , Role(..)
+    , login
+    , logout
+    , currentUser
+    , requireAuth
+    , requireRole
+    ) where
+
+login        :: SessionStore -> User -> Action ()
+logout       :: SessionStore -> Action ()
+currentUser  :: SessionStore -> Action (Maybe User)
+requireAuth  :: SessionStore -> Action User
+requireRole  :: SessionStore -> Role -> Action User
+```
+
+---
+
+## `Lurk.Flash` — Flash Messages
+
+One-time session data for success/error feedback:
+
+```haskell
+flashSuccess :: Text -> Action ()
+flashError   :: Text -> Action ()
+flashWarning :: Text -> Action ()
+getFlash     :: Action (Maybe Flash)
+```
+
+---
+
+## `Lurk.DB` — Type-Safe Database Layer
+
+The "Laravel Killer" feature. No ORM — the Haskell type IS the schema:
+
+```haskell
+data User = User
+    { userId    :: Int
+    , userName  :: Text
+    , userEmail :: Text
+    } deriving (Generic, DBSchema)
+
+findUser :: Connection -> Int -> IO (Maybe User)
+createUser :: Connection -> NewUser -> IO User
+```
+
+---
+
+## `Lurk.Cache` — Caching Layer
+
+```haskell
+cacheGet    :: CacheStore -> Text -> IO (Maybe a)
+cacheSet    :: CacheStore -> Text -> Int -> a -> IO ()
+cacheDelete :: CacheStore -> Text -> IO ()
+cacheOr     :: CacheStore -> Text -> Int -> IO a -> IO a
+```
+
+---
+
+## `Lurk.i18n` — Enhanced Internationalization
+
+Beyond current `Language.hs`:
+
+```haskell
+-- Pluralization
+t :: Language -> Text -> Int -> Text
+t EN "item" 1 = "1 item"
+t EN "item" n = show n <> " items"
+
+-- Date formatting
+formatDate :: Language -> UTCTime -> Text
+
+-- Currency formatting
+formatCurrency :: Language -> Currency -> Text
+```
+
+---
+
+## `Lurk.WebSocket` — Real-Time Communication
+
+```haskell
+wsHandler :: FromJSON msg => (msg -> Action ()) -> LurkApp ()
+broadcast  :: ToJSON msg => msg -> ConnectionPool -> IO ()
+sendTo     :: ToJSON msg => ConnectionId -> msg -> IO ()
+```
+
+---
+
+## Priority Matrix
+
+| Priority | Feature | Effort | Impact |
+|----------|---------|--------|--------|
+| P0 | `{{expr}}` syntax | Medium | High |
+| P0 | `Lurk.Form` | Low | High |
+| P1 | `Lurk.Mail` | Low | High |
+| P1 | `Lurk.Cloudflare` | Medium | High |
+| P1 | `Lurk.Auth` | Medium | High |
+| P2 | `@if` / `@forEach` | High | High |
+| P2 | `Lurk.Flash` | Low | Medium |
+| P3 | `Lurk.DB` | Very High | Very High |
+| P3 | `Lurk.i18n` | Medium | Medium |
+| P3 | `Lurk.WebSocket` | High | Medium |
+| P4 | `Lurk.Cache` | Medium | Medium |
+| P4 | `Lurk.WASM` | Very High | Very High |
+| P4 | `Lurk.Admin` | Very High | Very High |

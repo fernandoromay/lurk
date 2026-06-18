@@ -7,6 +7,7 @@ module Lurk.App
     , getPage
     , getPages
     , postAction
+    , postActions
     , getStore
     ) where
 
@@ -86,3 +87,8 @@ getPages langs pathFn actionFn =
 -- Register a post action
 postAction :: Text -> Action () -> LurkApp
 postAction path = post (literal $ T.unpack path)
+
+-- | Register a post action for each value in a list (multi-language).
+postActions :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
+postActions langs pathFn actionFn =
+    mapM_ (\lang -> postAction (pathFn lang) (actionFn lang)) langs
