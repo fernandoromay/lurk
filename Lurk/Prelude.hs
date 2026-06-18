@@ -11,6 +11,8 @@ module Lurk.Prelude
     , formParam
     , lurk
     , renderHtml
+    , forEach
+    , forEachWithIndex
     , render
     , Html
     , ToHtml (..)
@@ -76,7 +78,7 @@ import Data.Map (Map)
 import Data.Text (Text)
 import Data.Text.Lazy qualified as TL
 import Lurk.Assets (asset, mkAssetPath)
-import Lurk.Html (Html, ToHtml (..), renderHtml)
+import Lurk.Html (Html, ToHtml (..), renderHtml, forEach, forEachWithIndex)
 import Lurk.QQ (lurk)
 import Lurk.Routes (isSubpath, currentPath, trailingSlash)
 import Lurk.Request (preferredLanguages, cfCountry, resolveLanguage)

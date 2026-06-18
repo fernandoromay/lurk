@@ -18,18 +18,112 @@ type Parser = Parsec Void String
 data Chunk = Literal String | HaskellExp String
     deriving Show
 
--- | Parse the raw template string into chunks of literal HTML and `{haskell}` expressions.
+-- | Parse the raw template string into chunks of literal HTML and {{haskell}} expressions.
 parser :: Parser [Chunk]
 parser = many (try haskellExp <|> literal) <* eof
   where
     haskellExp = do
-        _ <- char '{'
-        code <- takeWhile1P (Just "Haskell code") (/= '}')
-        _ <- char '}'
+        _ <- string "{{"
+        code <- bracedExpr 1
         return (HaskellExp code)
-    
+
+    -- | Read Haskell code inside {{ }}, tracking brace depth and lurk nesting.
+    bracedExpr :: Int -> Parser String
+    bracedExpr 0 = return ""
+    bracedExpr depth = do
+        c <- anySingle
+        case c of
+            '{' -> (c:) <$> bracedExpr (depth + 1)
+            '}' -> do
+                isClose <- option False (try (lookAhead (char '}') >> return True))
+                if isClose
+                    then do
+                        _ <- char '}'
+                        bracedExpr (depth - 1)
+                    else (c:) <$> bracedExpr depth
+            '[' -> do
+                isLurk <- option False (try (lookAhead (string "lurk|") >> return True))
+                if isLurk
+                    then do
+                        _ <- string "lurk|"
+                        inner <- bracketSkip 1
+                        (([c] ++ "lurk|" ++ inner ++ "|]") ++) <$> bracedExpr depth
+                    else (c:) <$> bracedExpr depth
+            '(' -> do
+                isLurk <- option False (try (lookAhead (string "lurk|") >> return True))
+                if isLurk
+                    then do
+                        _ <- string "lurk|"
+                        inner <- lurkSkip 1
+                        (([c] ++ "lurk|" ++ inner ++ "|)") ++) <$> bracedExpr depth
+                    else (c:) <$> bracedExpr depth
+            '\n' -> (c:) <$> bracedExpr depth
+            _    -> (c:) <$> bracedExpr depth
+
+    -- | Skip content inside (lurk|...|), tracking nested lurk depth.
+    lurkSkip :: Int -> Parser String
+    lurkSkip 0 = return ""
+    lurkSkip n = do
+        c <- anySingle
+        case c of
+            '|' -> do
+                isClose <- option False (try (lookAhead (char ')') >> return True))
+                if isClose
+                    then do
+                        _ <- char ')'
+                        lurkSkip (n - 1)
+                    else (c:) <$> lurkSkip n
+            '(' -> do
+                isLurk <- option False (try (lookAhead (string "lurk|") >> return True))
+                if isLurk
+                    then do
+                        _ <- string "lurk|"
+                        inner <- lurkSkip 1
+                        (([c] ++ "lurk|" ++ inner ++ "|)") ++) <$> lurkSkip n
+                    else (c:) <$> lurkSkip n
+            '[' -> do
+                isLurk <- option False (try (lookAhead (string "lurk|") >> return True))
+                if isLurk
+                    then do
+                        _ <- string "lurk|"
+                        inner <- bracketSkip 1
+                        (([c] ++ "lurk|" ++ inner ++ "|]") ++) <$> lurkSkip n
+                    else (c:) <$> lurkSkip n
+            _ -> (c:) <$> lurkSkip n
+
+    -- | Skip content inside [lurk|...|], tracking nested lurk depth.
+    bracketSkip :: Int -> Parser String
+    bracketSkip 0 = return ""
+    bracketSkip n = do
+        c <- anySingle
+        case c of
+            '|' -> do
+                isClose <- option False (try (lookAhead (char ']') >> return True))
+                if isClose
+                    then do
+                        _ <- char ']'
+                        bracketSkip (n - 1)
+                    else (c:) <$> bracketSkip n
+            '[' -> do
+                isLurk <- option False (try (lookAhead (string "lurk|") >> return True))
+                if isLurk
+                    then do
+                        _ <- string "lurk|"
+                        inner <- bracketSkip 1
+                        (([c] ++ "lurk|" ++ inner ++ "|]") ++) <$> bracketSkip n
+                    else (c:) <$> bracketSkip n
+            '(' -> do
+                isLurk <- option False (try (lookAhead (string "lurk|") >> return True))
+                if isLurk
+                    then do
+                        _ <- string "lurk|"
+                        inner <- lurkSkip 1
+                        (([c] ++ "lurk|" ++ inner ++ "|)") ++) <$> bracketSkip n
+                    else (c:) <$> bracketSkip n
+            _ -> (c:) <$> bracketSkip n
+
     literal = do
-        text <- takeWhile1P (Just "Literal text") (/= '{')
+        text <- takeWhile1P (Just "Literal text") (\c -> c /= '{')
         return (Literal text)
 
 extractDotChain :: Exp -> Maybe [String]
@@ -68,10 +162,63 @@ transformExp e = e
 
 parseSimpleCode :: String -> Q Exp
 parseSimpleCode code = do
-    let preprocessed = T.unpack $ T.replace "?" "__implicit_" $ T.pack code
+    let (cleanCode, lurks) = extractInnerLurks code
+        preprocessed = T.unpack
+          . T.replace "?" "__implicit_"
+          $ T.pack cleanCode
     case parseExp preprocessed of
-        Right exp -> return (transformExp exp)
-        Left err -> fail $ "Parse error in LURK `{}` block: " ++ err ++ "\nCode: " ++ code
+        Right exp -> replaceInnerLurks lurks (transformExp exp)
+        Left err -> fail $ "Parse error in LURK `{{}}` block: " ++ err ++ "\nCode: " ++ code
+
+-- | Extract (lurk|...|) blocks, replacing each with a placeholder variable.
+-- Tracks nested (lurk|...) depth so inner closes don't prematurely terminate extraction.
+extractInnerLurks :: String -> (String, [String])
+extractInnerLurks = go 0 id
+  where
+    go _ acc [] = (acc [], [])
+    go n acc ('(':'l':'u':'r':'k':'|':rest) =
+        let (content, afterClose) = findLurkClose rest 1
+            name = "__innerLurk_" ++ show n ++ "__"
+            (restStr, lurks) = go (n+1) id afterClose
+        in (acc (name ++ restStr), content : lurks)
+    go n acc (c:rest) = go n (acc . (c:)) rest
+
+    -- | Find the matching |) for a (lurk|...|) block, tracking nested depth.
+    findLurkClose [] _ = ([], [])
+    findLurkClose s 0 = (s, [])  -- shouldn't happen, but safety
+    findLurkClose ('|':')':rest) 1 = ([], rest)
+    findLurkClose ('|':')':rest) n = let (a, b) = findLurkClose rest (n - 1) in ('|':')':a, b)
+    findLurkClose ('(':'l':'u':'r':'k':'|':rest) n =
+        let (a, b) = findLurkClose rest (n + 1) in ('(':'l':'u':'r':'k':'|':a, b)
+    findLurkClose (c:rest) n = let (a, b) = findLurkClose rest n in (c:a, b)
+
+-- | Replace placeholder variables in the AST with recursively parsed lurk QQs.
+replaceInnerLurks :: [String] -> Exp -> Q Exp
+replaceInnerLurks [] exp = return exp
+replaceInnerLurks lurks exp = do
+    let names = map (\(i, _) -> mkName ("__innerLurk_" ++ show i ++ "__")) (zip [0..] lurks)
+        pairs = zip names lurks
+    go pairs exp
+  where
+    go pairs (VarE n) = case lookup n pairs of
+        Just lurkBody -> parseLurkExp lurkBody
+        Nothing -> return (VarE n)
+    go pairs (AppE f x) = AppE <$> go pairs f <*> go pairs x
+    go pairs (LamE pats body) = LamE pats <$> go pairs body
+    go pairs (LetE decs body) = LetE decs <$> go pairs body
+    go pairs (CaseE scrut matches) = CaseE <$> go pairs scrut <*> mapM (goMatch pairs) matches
+    go pairs (TupE es) = TupE <$> mapM (mapM (go pairs)) es
+    go pairs (ListE es) = ListE <$> mapM (go pairs) es
+    go pairs (ParensE e) = ParensE <$> go pairs e
+    go pairs (SigE e t) = flip SigE t <$> go pairs e
+    go pairs (InfixE me1 e me2) = InfixE <$> traverse (go pairs) me1 <*> go pairs e <*> traverse (go pairs) me2
+    go pairs (UInfixE e1 e2 e3) = UInfixE <$> go pairs e1 <*> go pairs e2 <*> go pairs e3
+    go pairs (CondE c t f) = CondE <$> go pairs c <*> go pairs t <*> go pairs f
+    go pairs other = return other
+
+    goMatch pairs (Match p body decs) = Match p <$> goBody pairs body <*> return decs
+    goBody pairs (GuardedB drs) = GuardedB <$> mapM (\(guard, e) -> (guard,) <$> go pairs e) drs
+    goBody pairs other = return other
 
 -- | Converts the parsed chunks into a single Template Haskell Expression.
 parseLurkExp :: String -> Q Exp

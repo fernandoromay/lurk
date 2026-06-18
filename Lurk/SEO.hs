@@ -49,36 +49,36 @@ defaultSEO = SEO
 
 renderSEO :: SEO -> Html
 renderSEO seo = [lurk|
-    <title>{title seo}</title>
-    <meta name="title" content="{metaTitle seo}">
-    <meta name="description" content="{metaDescription seo}">
-    {renderRobots (robots seo)}
-    {renderCanonical (canonical seo)}
-    {renderAlternates (alternates seo)}
-    {renderOgTitle (ogTitle seo)}
-    {renderOgDescription (ogDescription seo)}
-    {renderOgType (ogType seo)}
-    {renderOgImage (ogImage seo)}
-    {customTags seo}
+    <title>{{title seo}}</title>
+    <meta name="title" content="{{metaTitle seo}}">
+    <meta name="description" content="{{metaDescription seo}}">
+    {{renderRobots (robots seo)}}
+    {{renderCanonical (canonical seo)}}
+    {{renderAlternates (alternates seo)}}
+    {{renderOgTitle (ogTitle seo)}}
+    {{renderOgDescription (ogDescription seo)}}
+    {{renderOgType (ogType seo)}}
+    {{renderOgImage (ogImage seo)}}
+    {{customTags seo}}
 |]
   where
-    renderRobots (Just r) = [lurk|<meta name="robots" content="{r}">|]
+    renderRobots (Just r) = [lurk|<meta name="robots" content="{{r}}">|]
     renderRobots Nothing  = mempty
 
-    renderCanonical (Just c) = [lurk|<link rel="canonical" href="{c}">|]
+    renderCanonical (Just c) = [lurk|<link rel="canonical" href="{{c}}">|]
     renderCanonical Nothing  = mempty
 
     renderAlternates = concatHtml . map (\a ->
-        [lurk|<link rel="alternate" hreflang="{hreflang a}" href="{href a}">|])
+        [lurk|<link rel="alternate" hreflang="{{hreflang a}}" href="{{href a}}">|])
 
-    renderOgTitle (Just t) = [lurk|<meta property="og:title" content="{t}">|]
+    renderOgTitle (Just t) = [lurk|<meta property="og:title" content="{{t}}">|]
     renderOgTitle Nothing  = mempty
 
-    renderOgDescription (Just d) = [lurk|<meta property="og:description" content="{d}">|]
+    renderOgDescription (Just d) = [lurk|<meta property="og:description" content="{{d}}">|]
     renderOgDescription Nothing  = mempty
 
-    renderOgType (Just t) = [lurk|<meta property="og:type" content="{t}">|]
+    renderOgType (Just t) = [lurk|<meta property="og:type" content="{{t}}">|]
     renderOgType Nothing  = mempty
 
-    renderOgImage (Just i) = [lurk|<meta property="og:image" content="{i}">|]
+    renderOgImage (Just i) = [lurk|<meta property="og:image" content="{{i}}">|]
     renderOgImage Nothing  = mempty
