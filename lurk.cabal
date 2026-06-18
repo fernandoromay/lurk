@@ -57,6 +57,7 @@ library
                       entropy,
                       stm,
                       wai-extra,
+                      network,
                       cookie,
                       case-insensitive,
                       aeson,

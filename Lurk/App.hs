@@ -14,11 +14,14 @@ import Control.Concurrent.STM (TVar, newTVarIO, readTVarIO, atomically, writeTVa
 import Data.Text (Text)
 import qualified Data.Text as T
 import System.IO.Unsafe (unsafePerformIO)
+import System.Environment (lookupEnv)
 import Lurk.Routes (trailingSlash)
 import Lurk.Session (SessionStore, newFileSessionStore)
 import Lurk.Session.Middleware (sessionMiddleware)
 import Lurk.CSRF (csrfMiddleware)
 import Network.Wai.Middleware.Static (staticPolicy, addBase)
+import Network.Wai.Middleware.ForceSSL (forceSSL)
+import Network.Wai (Middleware)
 import Web.Scotty (ScottyM, ActionM, middleware, scotty, get, post, literal)
 
 -- | Global store reference (set during startup, read by handlers)
@@ -42,13 +45,23 @@ type Action a = ActionM a
 
 data RouteOption
     = TrailingSlashes       -- ^ Enforce trailing slashes
+    | ForceSSL              -- ^ Redirect HTTP to HTTPS
     | ServeStatic FilePath  -- ^ Serve a dir of static assets
+
+-- | A smarter ForceSSL that only runs in production
+smartForceSSL :: Middleware
+smartForceSSL app req respond = do
+    env <- lookupEnv "LURK_ENV"
+    if env == Just "production"
+        then forceSSL app req respond
+        else app req respond
 
 -- Apply a list of route-level settings
 routeSettings :: [RouteOption] -> LurkApp
 routeSettings = mapM_ apply
   where
     apply TrailingSlashes    = middleware trailingSlash
+    apply ForceSSL           = middleware smartForceSSL
     apply (ServeStatic dir)  = middleware $ staticPolicy (addBase dir)
 
 -- Start the Lurk application on the given port
