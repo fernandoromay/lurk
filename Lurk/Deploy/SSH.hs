@@ -72,7 +72,8 @@ instance DeployProvider SSHProvider where
 
     activate (SSHProvider cfg) = do
         putStrLn "Activating..."
-        callProcess "ssh" [(user cfg ++ "@" ++ host cfg), activate_cmd cfg]
+        let remoteBinary = path cfg ++ "/" ++ service_name cfg
+        _ <- callProcess "ssh" [(user cfg ++ "@" ++ host cfg), "chmod +x " ++ remoteBinary ++ " && " ++ activate_cmd cfg]
         pure $ Right ()
 
     rollback (SSHProvider cfg) = do
