@@ -301,3 +301,11 @@ The key insight: the framework should own **security and infrastructure**
 (honeypot, rate limiting, CSRF, session management) while the project owns
 **business logic** (what to do with the data). `Lurk.Form` draws that line
 cleanly.
+
+## Deployment & Performance
+
+### Binary Stripping
+Add a `strip` step to the deployment pipeline to reduce binary size (e.g., from 55MB to ~20MB) and speed up transfers. This removes debugging symbols not needed for production.
+
+### Remote Build Support
+Investigate optional remote builds on VPS for projects where VPS RAM > 4GB to leverage incremental builds without local GHC/Cabal requirements.
