@@ -18,14 +18,41 @@ type Parser = Parsec Void String
 data Chunk = Literal String | HaskellExp String
     deriving Show
 
+-- | A chunk with its byte offset in the template string.
+data LocatedChunk = LocatedChunk
+    { lcOffset :: Int
+    , lcChunk  :: Chunk
+    } deriving Show
+
+-- | Convert a byte offset to a 1-based line number and column.
+offsetToLineCol :: String -> Int -> (Int, Int)
+offsetToLineCol input offset = go 1 1 (take offset input)
+  where
+    go line col [] = (line, col)
+    go line col ('\n':rest) = go (line + 1) 1 rest
+    go line col (_:rest) = go line (col + 1) rest
+
+-- | Format a location for error messages.
+formatLocation :: String -> Int -> String
+formatLocation input offset =
+    let (line, col) = offsetToLineCol input offset
+        lines' = lines input
+        lineContent = if line <= length lines' then lines' !! (line - 1) else ""
+        padding = replicate (col - 1) ' '
+    in "line " ++ show line ++ ", column " ++ show col ++ ":\n"
+        ++ lineContent ++ "\n"
+        ++ padding ++ "^"
+
 -- | Parse the raw template string into chunks of literal HTML and {{haskell}} expressions.
-parser :: Parser [Chunk]
+-- Each HaskellExp is tagged with its byte offset in the template.
+parser :: Parser [LocatedChunk]
 parser = many (try haskellExp <|> literal) <* eof
   where
     haskellExp = do
+        offset <- getOffset
         _ <- string "{{"
         code <- bracedExpr 1
-        return (HaskellExp code)
+        return (LocatedChunk offset (HaskellExp code))
 
     -- | Read Haskell code inside {{ }}, tracking brace depth and lurk nesting.
     bracedExpr :: Int -> Parser String
@@ -123,8 +150,9 @@ parser = many (try haskellExp <|> literal) <* eof
             _ -> (c:) <$> bracketSkip n
 
     literal = do
+        offset <- getOffset
         text <- takeWhile1P (Just "Literal text") (\c -> c /= '{')
-        return (Literal text)
+        return (LocatedChunk offset (Literal text))
 
 extractDotChain :: Exp -> Maybe [String]
 extractDotChain (VarE n) = Just [nameBase n]
@@ -160,15 +188,17 @@ transformExp (VarE n)
     | "__implicit_" `isPrefixOf` nameBase n = ImplicitParamVarE (drop 11 (nameBase n))
 transformExp e = e
 
-parseSimpleCode :: String -> Q Exp
-parseSimpleCode code = do
+parseSimpleCode :: String -> String -> Int -> Q Exp
+parseSimpleCode templateStr code offset = do
     let (cleanCode, lurks) = extractInnerLurks code
         preprocessed = T.unpack
           . T.replace "?" "__implicit_"
           $ T.pack cleanCode
     case parseExp preprocessed of
         Right exp -> replaceInnerLurks lurks (transformExp exp)
-        Left err -> fail $ "Parse error in LURK `{{}}` block: " ++ err ++ "\nCode: " ++ code
+        Left err -> fail $ "LURK parse error in {{ }} block at " ++ formatLocation templateStr offset
+            ++ "\n" ++ err
+            ++ "\n\nExpression: " ++ code
 
 -- | Extract (lurk|...|) blocks, replacing each with a placeholder variable.
 -- Tracks nested (lurk|...) depth so inner closes don't prematurely terminate extraction.
@@ -224,13 +254,14 @@ replaceInnerLurks lurks exp = do
 parseLurkExp :: String -> Q Exp
 parseLurkExp input = do
     let trim = reverse . dropWhile isSpace . reverse . dropWhile isSpace
-    case parse parser "" (trim input) of
+        trimmed = trim input
+    case parse parser "" trimmed of
         Left err -> fail (errorBundlePretty err)
         Right chunks -> do
-            let toExpChunk (Literal str) = 
+            let toExpChunk (LocatedChunk offset (Literal str)) = 
                     appE (varE 'preEscapedToHtml) (appE (varE 'T.pack) (stringE str))
-                toExpChunk (HaskellExp code) = 
-                    appE (varE 'toHtml) (parseSimpleCode code)
+                toExpChunk (LocatedChunk offset (HaskellExp code)) = 
+                    appE (varE 'toHtml) (parseSimpleCode trimmed code offset)
             
             listExp <- listE (map toExpChunk chunks)
             appE (varE 'concatHtml) (return listExp)
