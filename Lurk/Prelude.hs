@@ -38,6 +38,14 @@ module Lurk.Prelude
     , postActions
     , RouteOption (..)
     , getStore
+    , getAppEnv
+    -- Env
+    , Env
+    , getEnv
+    , getEnvInt
+    , getEnvWithDefault
+    , requireEnv
+    , hasEnv
     -- Session
     , SessionId
     , Session(..)
@@ -75,9 +83,9 @@ import Lurk.Request (preferredLanguages, cfCountry, resolveLanguage)
 import Lurk.Cookie (getCookie, setCookie, setSimpleCookie, deleteCookie)
 import Lurk.Session (SessionId, Session(..), SessionStore, newSessionStore, getSession, getSessionValue, setSessionValue, deleteSessionValue, newSessionId, cleanupSessions)
 import Lurk.CSRF (CsrfToken, newCsrfToken, getCsrfToken, validateCsrfToken, getSessionIdFromHeaders, cacheFormBody, lookupCachedFormParam, getCachedFormParams)
-import Lurk.Env (loadEnv, loadEnvFile)
+import Lurk.Env (Env, loadEnv, loadEnvFile, getEnv, getEnvInt, getEnvWithDefault, requireEnv, hasEnv)
 import Lurk.SEO
-import Lurk.App (LurkApp, Action, getPage, getPages, postAction, postActions, routeSettings, runLurk, RouteOption(..), getStore)
+import Lurk.App (LurkApp, Action, getPage, getPages, postAction, postActions, routeSettings, runLurk, RouteOption(..), getStore, getAppEnv)
 import Web.Scotty (captureParam, formParam, html, notFound, queryParam)
 import Prelude
 

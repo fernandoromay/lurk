@@ -9,6 +9,7 @@ module Lurk.App
     , postAction
     , postActions
     , getStore
+    , getAppEnv
     ) where
 
 import Control.Concurrent.STM (TVar, newTVarIO, readTVarIO, atomically, writeTVar)
@@ -20,6 +21,8 @@ import Lurk.Routes (trailingSlash)
 import Lurk.Session (SessionStore, newFileSessionStore)
 import Lurk.Session.Middleware (sessionMiddleware)
 import Lurk.CSRF (csrfMiddleware)
+import Lurk.Env (Env)
+import qualified Lurk.Env
 import Network.Wai.Middleware.Static (staticPolicy, addBase)
 import Network.Wai.Middleware.ForceSSL (forceSSL)
 import Network.Wai (Middleware)
@@ -30,6 +33,11 @@ import Web.Scotty (ScottyM, ActionM, middleware, scotty, get, post, literal)
 storeRef :: TVar (Maybe SessionStore)
 storeRef = unsafePerformIO $ newTVarIO Nothing
 
+-- | Global env reference (set during startup, read by handlers)
+{-# NOINLINE envRef #-}
+envRef :: TVar (Maybe Env)
+envRef = unsafePerformIO $ newTVarIO Nothing
+
 -- | Get the session store (for use in handlers)
 getStore :: IO SessionStore
 getStore = do
@@ -37,6 +45,14 @@ getStore = do
     case ms of
         Just s -> pure s
         Nothing -> error "Lurk.App.getStore: session store not initialized"
+
+-- | Get the app environment (for use in handlers)
+getAppEnv :: IO Env
+getAppEnv = do
+    me <- readTVarIO envRef
+    case me of
+        Just e -> pure e
+        Nothing -> error "Lurk.App.getAppEnv: env not initialized"
 
 -- | The application monad.
 type LurkApp = ScottyM ()
@@ -68,6 +84,8 @@ routeSettings = mapM_ apply
 -- Start the Lurk application on the given port
 runLurk :: Int -> LurkApp -> IO ()
 runLurk port app = do
+    env <- Lurk.Env.loadEnv
+    atomically $ writeTVar envRef (Just env)
     store <- newFileSessionStore ".lurk-sessions"
     atomically $ writeTVar storeRef (Just store)
     scotty port $ do
