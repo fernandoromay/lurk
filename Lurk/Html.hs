@@ -16,7 +16,7 @@ class ToHtml a where
 
 instance ToHtml Text where
     -- Basic HTML escaping
-    toHtml t = Html $ T.replace "<" "&lt;" $ T.replace ">" "&gt;" $ T.replace "&" "&amp;" t
+    toHtml t = Html $ T.replace "<" "&lt;" $ T.replace ">" "&gt;" $ T.replace "&" "&amp;" $ T.replace "\"" "&quot;" $ T.replace "'" "&#39;" t
 
 instance ToHtml String where
     toHtml = toHtml . T.pack
