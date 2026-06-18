@@ -57,6 +57,9 @@ module Lurk.Prelude
     , cacheFormBody
     , lookupCachedFormParam
     , getCachedFormParams
+    -- Env
+    , loadEnv
+    , loadEnvFile
     ) where
 
 import Control.Monad.IO.Class (liftIO)
@@ -71,6 +74,7 @@ import Lurk.Request (preferredLanguages, cfCountry, resolveLanguage)
 import Lurk.Cookie (getCookie, setCookie, setSimpleCookie, deleteCookie)
 import Lurk.Session (SessionId, Session(..), SessionStore, newSessionStore, getSession, getSessionValue, setSessionValue, deleteSessionValue, newSessionId, cleanupSessions)
 import Lurk.CSRF (CsrfToken, newCsrfToken, getCsrfToken, validateCsrfToken, getSessionIdFromHeaders, cacheFormBody, lookupCachedFormParam, getCachedFormParams)
+import Lurk.Env (loadEnv, loadEnvFile)
 import Lurk.SEO
 import Lurk.App (LurkApp, Action, getPage, getPages, postAction, routeSettings, runLurk, RouteOption(..), getStore)
 import Web.Scotty (captureParam, formParam, html, notFound, queryParam)

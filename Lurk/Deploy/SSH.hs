@@ -31,7 +31,7 @@ instance DeployProvider SSHProvider where
         _ <- callProcess "ssh" [(user cfg ++ "@" ++ host cfg), "mkdir -p " ++ path cfg]
         
         -- 2. Create systemd service file
-        let serviceFile = "[Unit]\nDescription=" ++ service_name cfg ++ "\nAfter=network.target\n\n[Service]\nExecStart=" ++ path cfg ++ "/" ++ service_name cfg ++ "\nWorkingDirectory=" ++ path cfg ++ "\nRestart=always\n\n[Install]\nWantedBy=multi-user.target"
+        let serviceFile = "[Unit]\nDescription=" ++ service_name cfg ++ "\nAfter=network.target\n\n[Service]\nEnvironmentFile=" ++ path cfg ++ "/.env\nExecStart=" ++ path cfg ++ "/" ++ service_name cfg ++ "\nWorkingDirectory=" ++ path cfg ++ "\nRestart=always\n\n[Install]\nWantedBy=multi-user.target"
         _ <- callProcess "ssh" [(user cfg ++ "@" ++ host cfg), "echo '" ++ serviceFile ++ "' | sudo tee /etc/systemd/system/" ++ service_name cfg ++ ".service"]
         
         -- 3. Reload systemd

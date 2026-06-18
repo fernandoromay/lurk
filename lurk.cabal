@@ -24,6 +24,7 @@ library
                       Lurk.Assets
                       Lurk.Cookie
                       Lurk.CSRF
+                      Lurk.Env
                       Lurk.Html
                       Lurk.Language
                       Lurk.QQ
