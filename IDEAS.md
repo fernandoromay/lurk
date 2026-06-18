@@ -144,33 +144,14 @@ requireAuth  :: SessionStore -> Action User
 requireRole  :: SessionStore -> Role -> Action User
 ```
 
-### Component Abstraction
+### QQ Improvements (all at once)
 
-Blade has `@include('components.button')`. React has `<Button />`.
-Lurk has functions returning `Html` with no composition mechanism.
+The `[lurk|...|]` QQ needs several upgrades that should be designed and
+implemented together since they all touch the same parser.
 
-**Option A — `@include` in QQ (preferred):**
+#### 1. `{{expr}}` syntax
 
-```haskell
-[lurk|
-@include "components.option-card" { opt = opt, idx = idx }
-|]
-```
-
-QQ resolves at compile time. No runtime overhead.
-
-**Option B — `Lurk.Component` module:**
-
-```haskell
-component :: Text -> [(Text, Html)] -> Html
-slot :: Text -> Html -> [(Text, Html)]
-```
-
-More flexible but more boilerplate.
-
-### `{{expr}}` Template Syntax
-
-The current `{haskell}` conflicts with CSS/JS `{}` blocks.
+Current `{haskell}` conflicts with CSS/JS `{}` blocks. Change to `{{expr}}`:
 
 ```haskell
 [lurk|
@@ -181,36 +162,77 @@ The current `{haskell}` conflicts with CSS/JS `{}` blocks.
 |]
 ```
 
-Change to `{{expr}}`. Backwards incompatible but trivial to migrate.
+Backwards incompatible but trivial to migrate (search-replace).
 
-### Template Control Flow
+#### 2. Multi-line expressions
 
-`@if`, `@forEach`, `@forEachIndexed`, `@case`/`@of` in `[lurk|...|]`:
+Currently expressions must be single-line. Allow multi-line inside `{{...}}`:
 
 ```haskell
 [lurk|
-@forEach items as item
-    <div>{{item.name}}</div>
-@end
-
-@if isLoggedIn
-    <a href="/dashboard">Dashboard</a>
-@else
-    <a href="/login">Login</a>
-@end
+<div>{{
+    let x = 1
+        y = 2
+    in x + y
+}}</div>
 |]
 ```
 
-Grammar:
+The parser reads everything between `{{` and `}}` as Haskell, regardless
+of newlines.
+
+#### 3. Nested `[lurk|...|]` inside `{{...}}`
+
+This is the key feature. It enables `forEach` and other higher-order
+functions without creating a DSL:
+
+```haskell
+[lurk|
+<ul>
+{{forEach items (\item ->
+    [lurk|<li>{{item.name}}</li>|]
+)}}
+</ul>
+|]
 ```
-template     ::= (literal | interpolation | forEach | if | case)*
-interpolation ::= "{{" expr "}}"
-forEach      ::= "@forEach" expr "as" (name | idx "," name "indexed") block
-if           ::= "@if" expr block ("@else" block)? block
-case         ::= "@case" expr "of" alternative+ block
-alternative  ::= "@of" pattern "->" block
-block        ::= template "@end"
+
+The parser tracks bracket depth and recognizes `[lurk|` / `|]` as balanced
+delimiters inside `{{...}}`. This means any Haskell function that takes
+a `Text -> Html` callback works naturally:
+
+```haskell
+-- forEach with index
+{{forEachWithIndex items (\i item ->
+    [lurk|<li>{{i}}. {{item.name}}</li>|]
+)}}
+
+-- conditional rendering (just use Haskell)
+{{if isLoggedIn then
+    [lurk|<a href="/dashboard">Dashboard</a>|]
+else
+    [lurk|<a href="/login">Login</a>|]
+}}
+
+-- case expression
+{{case userRole of
+    Admin -> [lurk|<span>Admin</span>|]
+    User  -> [lurk|<span>User</span>|]
+    Guest -> [lurk|<span>Guest</span>|]
+}}
 ```
+
+No `@if`, no `@forEach`, no `@end`. Just Haskell. The QQ parser handles
+the nesting, TH generates the right code.
+
+#### Why no DSL?
+
+Adding `@if`/`@forEach`/`@end` creates another language to learn.
+Haskell already has `if`, `case`, `mapM_`, `foldMap`. The QQ should
+let you USE Haskell, not replace it with a template language.
+
+The only thing preventing this today is the parser can't handle nested
+QQ blocks inside `{{...}}`. Fix the parser, and all of Haskell is available
+inside templates — zero new syntax to learn.
 
 ---
 
