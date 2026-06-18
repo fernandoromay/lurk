@@ -53,19 +53,24 @@ instance DeployProvider SSHProvider where
     transfer (SSHProvider cfg) binaryPath mEnvPath = do
         putStrLn $ "Transferring files to " ++ host cfg ++ "..."
         let binaryName = service_name cfg
-        let remoteDest = user cfg ++ "@" ++ host cfg ++ ":" ++ path cfg
+        let remoteBase = user cfg ++ "@" ++ host cfg ++ ":" ++ path cfg
+        let remoteBinary = remoteBase ++ "/" ++ binaryName
         
         -- Create backup of existing binary on remote
         putStrLn "Creating remote backup..."
-        let remotePath = path cfg ++ "/" ++ binaryName
-        _ <- callProcess "ssh" [(user cfg ++ "@" ++ host cfg), "[ -f " ++ remotePath ++ " ] && mv " ++ remotePath ++ " " ++ remotePath ++ ".bak || true"]
+        _ <- callProcess "ssh" [(user cfg ++ "@" ++ host cfg), "[ -f " ++ path cfg ++ "/" ++ binaryName ++ " ] && mv " ++ path cfg ++ "/" ++ binaryName ++ " " ++ path cfg ++ "/" ++ binaryName ++ ".bak || true"]
         
-        -- Transfer new binary and public
-        callProcess "rsync" ["-avz", binaryPath, "public/", remoteDest ++ "/" ++ binaryName]
+        -- 1. Transfer binary
+        putStrLn "Transferring binary..."
+        callProcess "rsync" ["-avz", binaryPath, remoteBinary]
+
+        -- 2. Transfer public assets
+        putStrLn "Transferring public assets..."
+        callProcess "rsync" ["-avz", "public/", remoteBase ++ "/public/"]
         
         -- Transfer .env if it exists
         case mEnvPath of
-            Just envPath -> callProcess "rsync" ["-avz", envPath, remoteDest ++ "/.env"]
+            Just envPath -> callProcess "rsync" ["-avz", envPath, remoteBase ++ "/.env"]
             Nothing -> putStrLn "No .env file to transfer."
             
         pure $ Right ()
@@ -79,5 +84,7 @@ instance DeployProvider SSHProvider where
     rollback (SSHProvider cfg) = do
         putStrLn "Rolling back to previous binary..."
         let binaryName = service_name cfg
-        callProcess "ssh" [(user cfg ++ "@" ++ host cfg), "mv " ++ path cfg ++ "/" ++ binaryName ++ ".bak " ++ path cfg ++ "/" ++ binaryName ++ " && " ++ activate_cmd cfg]
+        let remoteBinary = path cfg ++ "/" ++ binaryName
+        let remoteBak = remoteBinary ++ ".bak"
+        _ <- callProcess "ssh" [(user cfg ++ "@" ++ host cfg), "mv " ++ remoteBak ++ " " ++ remoteBinary ++ " && chmod +x " ++ remoteBinary ++ " && " ++ activate_cmd cfg]
         pure $ Right ()
