@@ -1,38 +1,8 @@
 # Lurk Ideas
 
-## Built
-
-- [x] `Lurk.Env` — opaque `Env` type with `getEnv`/`requireEnv`/`hasEnv`
-- [x] `postActions` — multi-language POST route registration
-
 ---
 
 ## Easy (days)
-
-### HTML Escaping Fix
-
-`Lurk.Html.toHtml` only escapes `<`, `>`, and `&`. Does not escape `"`, `'`,
-or backtick. XSS risk in attribute contexts:
-
-```haskell
-[lurk|<div class="{userInput}">|]
--- If userInput is: " onclick="alert(1)
--- Result: <div class=" " onclick="alert(1)">
-```
-
-**Fix:** Add `T.replace "\"" "&quot;"` and `T.replace "'" "&#39;"` to `toHtml`
-in `Lurk.Html`. One-line change, real security impact.
-
-### QQ Error Messages with Line Numbers
-
-When a QQ expression fails to parse, the error gives no line number:
-```
-Parse error in LURK {} block: unexpected '<' expecting '}'
-```
-
-The QQ parser already uses megaparsec which tracks `SourcePos`. Exposing
-line/column in the error output is straightforward. The template string
-offset can be mapped back to a line number by counting newlines.
 
 ### `Lurk.Flash` — Flash Messages
 
@@ -144,6 +114,15 @@ requireAuth  :: SessionStore -> Action User
 requireRole  :: SessionStore -> Role -> Action User
 ```
 
+### VS Code Error Diagnostics for Lurk Blocks
+
+Detect at edit time via Language Server or VS Code diagnostics API:
+- Unclosed `{{` or `}}`
+- Unclosed `[lurk|` or `(lurk|`
+- Missing `|]` or `|)` terminators
+- `{{ }}` with empty content
+- Nested `[lurk|` without matching close
+
 ---
 
 ## Hard (months)
@@ -203,16 +182,43 @@ createUser :: Connection -> NewUser -> IO User
 
 ### `Lurk.i18n` — Enhanced Internationalization
 
-Pluralization, date formatting, currency formatting:
+Date formatting, currency formatting:
 
 ```haskell
-t :: Language -> Text -> Int -> Text
-t EN "item" 1 = "1 item"
-t EN "item" n = show n <> " items"
-
 formatDate :: Language -> UTCTime -> Text
 formatCurrency :: Language -> Currency -> Text
 ```
+
+### `Lurk.i18n` — Pluralization
+
+Explicit, type-safe pluralization. No complex rules — the programmer defines the forms, the framework picks the right one:
+
+```haskell
+data PluralForm = Singular | Plural | Dual | Paucal
+
+newtype Pluralizable = Pluralizable (Map PluralForm Text)
+
+singular :: Text -> Pluralizable
+plural   :: Text -> Pluralizable
+dual     :: Text -> Pluralizable
+paucal   :: Text -> Pluralizable
+
+pluralize :: Int -> Pluralizable -> Text
+```
+
+Usage in templates:
+
+```haskell
+[lurk|
+  <span>{{pluralize itemCount (singular "item" <> plural "items")}}</span>
+|]
+```
+
+Why this works:
+- **No magic** — Programmer decides forms, not the framework. No surprise singularization bugs.
+- **Language-agnostic** — Japanese uses `Singular` always. Estonian/Arabic edge cases are the translator's problem.
+- **Composable** — `Monoid` instance lets you combine forms: `singular "item" <> plural "items"`
+- **Extensible** — Add `Dual`, `Paucal` constructors for languages that need them (Arabic, Hebrew, Polish)
 
 ### `Lurk.WebSocket` — Real-Time Communication
 
@@ -252,3 +258,31 @@ Add `strip` step to reduce binary size from ~55MB to ~20MB.
 ### Remote Build Support
 
 Optional remote builds on VPS for projects where VPS RAM > 4GB.
+
+---
+
+## Issues Found
+
+### Critical
+
+1. **Missing `wai-middleware-force-ssl` in `lurk.cabal`** — `App.hs:27` imports `Network.Wai.Middleware.ForceSSL` but `lurk.cabal` does not list it in `build-depends`. Will fail on clean `cabal build`.
+
+2. **`[lurk|` nesting inside `{{ }}` is broken** — `extractInnerLurks` in `QQ.hs:206` only handles `(lurk|`. This is intentional: GHC cannot have `|]` inside `|]` (it reads the first `|]` as the end). Bracket nesting is documented in README but will fail at compile time.
+
+3. **`?` replacement is global** — `QQ.hs:195` replaces ALL `?` characters with `__implicit_`, including inside string literals and comments. Should only replace `?` at identifier word boundaries.
+
+### Cleanup
+
+4. **Duplicate `process` dependency** — `lurk.cabal:66,68` lists `process` twice.
+
+5. **Redefined stdlib functions** — `Session.hs` redefines `mapMaybe`, `foldM`, `void`, `forever`, `readMaybe` instead of importing from `Data.Maybe`, `Control.Monad`, `Text.Read`.
+
+6. **Unused dependencies** — `lurk.cabal` library section lists `mtl`, `syb`, `network`, `cookie` but no module imports them.
+
+7. **Empty `CHANGELOG.md`** — Should be populated or removed.
+
+### Security
+
+8. **Session cookie missing `Secure` flag** — `Session/Middleware.hs:82` builds the cookie without `Secure`, meaning it will be sent over plain HTTP. Should conditionally set `Secure` in production.
+
+9. **Session file persistence not atomic** — `Session.hs:226` uses `BS.writeFile` directly. A crash during write could corrupt the session file. Should write to a temp file then `rename`.
