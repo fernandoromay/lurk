@@ -183,7 +183,21 @@ transformExp (InfixE me1 e me2) = InfixE (fmap transformExp me1) (transformExp e
 transformExp (UInfixE e1 e2 e3) = UInfixE (transformExp e1) (transformExp e2) (transformExp e3)
 transformExp (ParensE e) = ParensE (transformExp e)
 transformExp (CondE e1 e2 e3) = CondE (transformExp e1) (transformExp e2) (transformExp e3)
+transformExp (CaseE scrut matches) = CaseE (transformExp scrut) (map transformMatch matches)
+  where
+    transformMatch (Match p body decs) = Match p (transformBody body) decs
+    transformBody (NormalB e) = NormalB (transformExp e)
+    transformBody (GuardedB drs) = GuardedB (map (\(guard, e) -> (guard, transformExp e)) drs)
 transformExp (ListE es) = ListE (map transformExp es)
+transformExp (LetE decs body) = LetE (map transformDec decs) (transformExp body)
+  where
+    transformDec (ValD pat body decs) = ValD pat (transformBody body) decs
+    transformDec (FunD name clauses) = FunD name (map transformClause clauses)
+    transformDec other = other
+    transformClause (Clause pats body decs) = Clause pats (transformBody body) decs
+    transformMatch (Match p body decs) = Match p (transformBody body) decs
+    transformBody (NormalB e) = NormalB (transformExp e)
+    transformBody (GuardedB drs) = GuardedB (map (\(guard, e) -> (guard, transformExp e)) drs)
 transformExp (VarE n)
     | "__implicit_" `isPrefixOf` nameBase n = ImplicitParamVarE (drop 11 (nameBase n))
 transformExp e = e
@@ -235,7 +249,7 @@ replaceInnerLurks lurks exp = do
         Nothing -> return (VarE n)
     go pairs (AppE f x) = AppE <$> go pairs f <*> go pairs x
     go pairs (LamE pats body) = LamE pats <$> go pairs body
-    go pairs (LetE decs body) = LetE decs <$> go pairs body
+    go pairs (LetE decs body) = LetE <$> mapM (goDec pairs) decs <*> go pairs body
     go pairs (CaseE scrut matches) = CaseE <$> go pairs scrut <*> mapM (goMatch pairs) matches
     go pairs (TupE es) = TupE <$> mapM (mapM (go pairs)) es
     go pairs (ListE es) = ListE <$> mapM (go pairs) es
@@ -247,8 +261,12 @@ replaceInnerLurks lurks exp = do
     go pairs other = return other
 
     goMatch pairs (Match p body decs) = Match p <$> goBody pairs body <*> return decs
+    goClause pairs (Clause pats body decs) = Clause pats <$> goBody pairs body <*> return decs
     goBody pairs (NormalB e) = NormalB <$> go pairs e
     goBody pairs (GuardedB drs) = GuardedB <$> mapM (\(guard, e) -> (guard,) <$> go pairs e) drs
+    goDec pairs (ValD pat body decs) = ValD pat <$> goBody pairs body <*> return decs
+    goDec pairs (FunD name clauses) = FunD name <$> mapM (goClause pairs) clauses
+    goDec pairs other = return other
 
 -- | Converts the parsed chunks into a single Template Haskell Expression.
 parseLurkExp :: String -> Q Exp
