@@ -15,11 +15,10 @@ class ToHtml a where
     toHtml :: a -> Html
 
 instance ToHtml Text where
-    -- Basic HTML escaping
-    toHtml t = Html $ T.replace "<" "&lt;" $ T.replace ">" "&gt;" $ T.replace "&" "&amp;" $ T.replace "\"" "&quot;" $ T.replace "'" "&#39;" t
+    toHtml = Html
 
 instance ToHtml String where
-    toHtml = toHtml . T.pack
+    toHtml = Html . T.pack
 
 instance ToHtml Html where
     toHtml = id
