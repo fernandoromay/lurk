@@ -44,7 +44,7 @@ library
                       text,
                       containers,
                       mtl,
-                      megaparsec,
+                      megaparsec >= 9.0 && < 9.8,
                       template-haskell,
                       directory,
                       filepath,
