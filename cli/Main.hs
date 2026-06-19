@@ -8,8 +8,9 @@ import System.FilePath
 import System.IO (hPutStr, hClose)
 import System.IO.Temp (withSystemTempFile)
 import Control.Monad (filterM, when)
-import Data.List (isSuffixOf, sort)
+import Data.List (isSuffixOf, sort, isInfixOf)
 import Data.Char (isAsciiUpper)
+import System.Info (os)
 import Data.Maybe (fromMaybe, isNothing)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -31,7 +32,9 @@ main = do
         ["build"] -> buildProject
         ["deploy"] -> deployProject
         ["deploy", "--init"] -> initDeploy
-        ["kill"] -> killPort "3000"
+        ["kill"] -> do
+            port <- detectPort
+            killPort port
         ["kill", port] -> killPort port
         _ -> putStrLn "Usage: lurk run | lurk build | lurk deploy | lurk deploy --init | lurk kill [port]"
 
@@ -244,8 +247,42 @@ runDeployment p mEnvContent = do
 killPort :: String -> IO ()
 killPort port = do
     putStrLn $ "Killing processes holding port " ++ port ++ "..."
-    _ <- rawSystem "fuser" ["-k", port ++ "/tcp"]
-    return ()
+    case os of
+        "mingw32" -> do
+            output <- readProcess "netstat" ["-ano"] ""
+            let matchingLines = filter (portPattern port) (lines output)
+                pids = map (last . words) matchingLines
+            mapM_ (\pid -> rawSystem "taskkill" ["/F", "/PID", pid]) pids
+        "darwin" -> do
+            pids <- readProcess "lsof" ["-t", "-i", ":" ++ port] ""
+            mapM_ (\pid -> when (not (null pid)) $ do
+                _ <- rawSystem "kill" ["-9", pid]
+                pure ()) (lines pids)
+        _ -> do
+            _ <- rawSystem "fuser" ["-k", port ++ "/tcp"]
+            return ()
+  where
+    portPattern p line = (":" ++ p) `isInfixOf` line
+
+detectPort :: IO String
+detectPort = do
+    loadDotEnv
+    mEnvPort <- lookupEnv "PORT"
+    case mEnvPort of
+        Just p -> pure p
+        Nothing -> do
+            exists <- doesFileExist "Config.hs"
+            if not exists
+                then pure "3000"
+                else do
+                    content <- TIO.readFile "Config.hs"
+                    let linesOfContent = T.lines content
+                        findVal = filter (\line -> "defaultPort =" `T.isInfixOf` line) linesOfContent
+                    case findVal of
+                        (line:_) -> do
+                            let val = T.strip $ snd $ T.breakOn "=" line
+                            pure $ T.unpack val
+                        [] -> pure "3000"
 
 runProject :: IO ()
 runProject = do
