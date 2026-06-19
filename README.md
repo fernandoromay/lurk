@@ -1,6 +1,8 @@
-# Lurk
+# Lurk (Lean Unified Rendering Kernel)
 
-A lightweight web framework. Compiles to a single native binary with instant cold starts, ~10MB memory footprint, and compile-time template safety.
+Lurk is the **L**ean **U**nified **R**endering **K**ernel.
+
+It is a lightweight, high-performance Haskell web framework designed for maximum developer experience and uncompromising type safety. Lurk compiles your entire application—including HTML templates and multi-language routing—into a single native binary. With instant cold starts, a minimal ~10MB memory footprint, and compile-time variable checking, Lurk catches template typos and missing translations before the code ever runs.
 
 ## Features
 

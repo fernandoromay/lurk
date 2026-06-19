@@ -1,7 +1,7 @@
 cabal-version:      3.0
 name:               lurk
 version:            0.1.0.0
-synopsis:           A lightweight, Nix-free Haskell web framework
+synopsis:           Lean Unified Rendering Kernel: A lightweight, compile-time safe web framework
 license:            MIT
 author:             Lurk Team
 build-type:         Simple
