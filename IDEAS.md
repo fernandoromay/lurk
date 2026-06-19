@@ -27,26 +27,30 @@ their own.
 
 ## Medium (weeks)
 
-### `Lurk.Mail` — Email Abstraction
+### `Lurk.Email.SMTP` — Email Sending (DONE)
 
-Current `Controller/Form.hs` has 140 lines of hand-rolled SMTP. Lurk should
-own this:
+Implemented in `Lurk.Email.SMTP`. Types (`SmtpConfig`, `Email`, `EmailError`)
+and `sendEmail` in a single module. State-aware SMTP with response code
+verification, STARTTLS/SMTPS support, and proper error handling.
+
+### `Lurk.Email` — HTTP-Based Providers (Future)
+
+Extend the email namespace with API-based providers:
 
 ```haskell
 data MailConfig
-    = SMTPConfig { smtpHost, smtpUser, smtpPass :: Text, smtpPort :: Int }
-    | SendGridConfig { apiKey :: Text }
+    = SMTPConfig { ... }       -- done
+    | MailgunConfig { apiKey :: Text, domain :: Text }
+    | SendgridConfig { apiKey :: Text }
     | ResendConfig { apiKey :: Text }
-
-data MailMessage = MailMessage
-    { from    :: Text
-    , to      :: [Text]
-    , subject :: Text
-    , body    :: Text
-    }
 
 sendMail :: MailConfig -> MailMessage -> IO (Either MailError ())
 ```
+
+### `Lurk.Email.Inbound` — Inbound Email (Future)
+
+Receive emails via webhooks (Mailgun/SendGrid POST) or IMAP polling.
+Modern web apps use webhooks, not long-lived IMAP connections.
 
 ### `Lurk.Form` — Reusable Form Processing Pipeline
 

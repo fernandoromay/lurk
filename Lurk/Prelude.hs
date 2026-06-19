@@ -88,7 +88,9 @@ import Lurk.CSRF (CsrfToken, newCsrfToken, getCsrfToken, validateCsrfToken, getS
 import Lurk.Env (Env, loadEnv, loadEnvFile, getEnv, getEnvInt, getEnvWithDefault, requireEnv, hasEnv)
 import Lurk.SEO
 import Lurk.App (LurkApp, Action, getPage, getPages, postAction, postActions, routeSettings, runLurk, RouteOption(..), getStore, getAppEnv)
-import Web.Scotty (captureParam, formParam, html, notFound, queryParam)
+import Web.Scotty (captureParam, formParam, html, queryParam)
+import Web.Scotty qualified as Scotty
+import Network.HTTP.Types qualified as Http
 import Prelude
 
 -- | Look up a value in the request context by key
@@ -103,3 +105,7 @@ render viewHtml ctx = do
     let ?currentPath = uri
         ?params = ctx
     html . TL.fromStrict . renderHtml $ viewHtml
+
+-- | Catch-all route that automatically sets the HTTP 404 status
+notFound :: Action () -> LurkApp
+notFound action = Scotty.notFound (Scotty.status Http.status404 >> action)
