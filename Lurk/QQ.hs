@@ -247,8 +247,8 @@ replaceInnerLurks lurks exp = do
     go pairs other = return other
 
     goMatch pairs (Match p body decs) = Match p <$> goBody pairs body <*> return decs
+    goBody pairs (NormalB e) = NormalB <$> go pairs e
     goBody pairs (GuardedB drs) = GuardedB <$> mapM (\(guard, e) -> (guard,) <$> go pairs e) drs
-    goBody pairs other = return other
 
 -- | Converts the parsed chunks into a single Template Haskell Expression.
 parseLurkExp :: String -> Q Exp
