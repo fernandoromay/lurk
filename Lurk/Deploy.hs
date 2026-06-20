@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Lurk.Deploy 
     ( DeployProvider(..)
     , DeployError(..)
@@ -8,18 +9,24 @@ module Lurk.Deploy
     , saveDeployConfig
     , generateEnvContent
     , getEnvKeysFromSource
+    , getProjectName
+    , resolveEnvVars
     ) where
 
 import GHC.Generics (Generic)
-import Data.Aeson (FromJSON, ToJSON, Value)
+import Data.Aeson (FromJSON, ToJSON, Value(..))
+import qualified Data.Aeson.KeyMap as KeyMap
+import qualified Data.Aeson.Key as Key
 import qualified Data.Yaml as Yaml
 import qualified Data.Map as Map
+import qualified Data.Vector as V
 import System.Environment (lookupEnv)
 import Data.Maybe (fromMaybe)
-import System.Directory (doesFileExist)
+import System.Directory (doesFileExist, listDirectory)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import Control.Monad (filterM)
+import Control.Monad (filterM, foldM)
+import Data.List (isPrefixOf, isSuffixOf)
 
 -- | Interface for different deployment methods
 class DeployProvider p where
@@ -89,3 +96,64 @@ saveDeployConfig :: FilePath -> DeployConfig -> IO (Either DeployError ())
 saveDeployConfig path cfg = do
     Yaml.encodeFile path cfg
     pure $ Right ()
+
+-- | Read project name from the first .cabal file's name: field
+getProjectName :: IO String
+getProjectName = do
+    files <- listDirectory "."
+    let cabalFiles = filter (".cabal" `isSuffixOf`) files
+    case cabalFiles of
+        [] -> pure "my-project"
+        (f:_) -> do
+            content <- TIO.readFile f
+            let nameLines = filter (\l -> "name:" `T.isPrefixOf` T.strip l) (T.lines content)
+            case nameLines of
+                (line:_) -> do
+                    let val = T.strip $ T.drop 1 $ snd $ T.breakOn ":" line
+                    pure $ if T.null val then "my-project" else T.unpack val
+                [] -> pure "my-project"
+
+-- | Resolve ${VAR} placeholders in a JSON Value from the environment
+-- Returns Left with all missing var names if any are unresolved
+resolveEnvVars :: Value -> IO (Either [String] Value)
+resolveEnvVars val = do
+    (missing, resolved) <- go [] val
+    if null missing
+        then pure $ Right resolved
+        else pure $ Left (reverse missing)
+  where
+    go acc (String s) = do
+        let refs = extractVarRefs s
+        (acc', s') <- resolveString acc refs s
+        pure (acc', String s')
+    go acc (Object m) = do
+        let pairs = KeyMap.toList m
+        (acc', pairs') <- foldM (\(a', ps) (k, v) -> do
+            (a'', v') <- go a' v
+            pure (a'', ps ++ [(k, v')])) (acc, []) pairs
+        pure (acc', Object (KeyMap.fromList pairs'))
+    go acc (Array a) = do
+        (acc', elems') <- foldM (\(a', es) e -> do
+            (a'', e') <- go a' e
+            pure (a'', es ++ [e'])) (acc, []) (V.toList a)
+        pure (acc', Array (V.fromList elems'))
+    go acc v = pure (acc, v)
+
+    resolveString acc [] s = pure (acc, s)
+    resolveString acc ((varName, ref):refs) s = do
+        mVal <- lookupEnv varName
+        case mVal of
+            Just val -> resolveString acc refs (T.replace ref (T.pack val) s)
+            Nothing -> resolveString (varName : acc) refs s
+
+    extractVarRefs s = go' [] s
+      where
+        go' acc t
+          | T.null t = reverse acc
+          | "${" `T.isPrefixOf` t =
+              let rest = T.drop 2 t
+                  (varName, after) = T.breakOn "}" rest
+              in if T.null after
+                  then reverse acc
+                  else go' ((T.unpack varName, "${" <> varName <> "}") : acc) (T.drop 1 after)
+          | otherwise = go' acc (T.drop 1 t)

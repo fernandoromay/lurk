@@ -7,7 +7,7 @@ import System.Directory
 import System.FilePath
 import System.IO (hPutStr, hClose)
 import System.IO.Temp (withSystemTempFile)
-import Control.Monad (filterM, when)
+import Control.Monad (filterM, when, unless)
 import Data.List (isSuffixOf, sort, isInfixOf)
 import Data.Char (isAsciiUpper)
 import System.Info (os)
@@ -22,6 +22,7 @@ import qualified Log
 import Data.Aeson (Value(..), Object, fromJSON, parseJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.KeyMap as KeyMap
+import qualified Data.Aeson.Key as Key
 import Data.Aeson.Types (parseMaybe)
 
 main :: IO ()
@@ -43,30 +44,55 @@ initDeploy = do
     putStrLn "Initializing deployment workflow..."
     createDirectoryIfMissing True ".github/workflows"
     keys <- Deploy.getEnvKeysFromSource
+    projectName <- Deploy.getProjectName
     
-    -- Load or create default config
+    -- Build config with ${VAR} placeholders
+    let configObj = KeyMap.fromList
+            [ (Key.fromString "host", String "${VPS_IP}")
+            , (Key.fromString "user", String "${VPS_USER}")
+            , (Key.fromString "path", String (T.pack ("/var/www/" ++ projectName)))
+            , (Key.fromString "service_name", String (T.pack projectName))
+            , (Key.fromString "activate_cmd", String (T.pack ("sudo systemctl restart " ++ projectName)))
+            ]
+    
+    -- Load existing or create new config
     configRes <- Deploy.loadDeployConfig "lurk.yaml"
-    cfg <- case configRes of
-        Left _ -> pure $ Deploy.DeployConfig "my-project" (Aeson.Object KeyMap.empty) (Deploy.DeploySettings "ssh" (Aeson.Object KeyMap.empty) Nothing)
-        Right c -> pure c
-        
+    let cfg = case configRes of
+            Right c -> c
+                { Deploy.project = projectName
+                , Deploy.deploy = (Deploy.deploy c)
+                    { Deploy.provider = "ssh"
+                    , Deploy.config = Aeson.Object configObj
+                    }
+                }
+            Left _ -> Deploy.DeployConfig
+                { Deploy.project = projectName
+                , Deploy.build = Aeson.Object KeyMap.empty
+                , Deploy.deploy = Deploy.DeploySettings
+                    { Deploy.provider = "ssh"
+                    , Deploy.config = Aeson.Object configObj
+                    , Deploy.env_vars = Nothing
+                    }
+                }
+    
     -- Sync env vars
     let currentVars = fromMaybe Map.empty $ Deploy.env_vars (Deploy.deploy cfg)
     let updatedVars = Map.fromList [(k, k) | k <- keys] `Map.union` currentVars
     let newCfg = cfg { Deploy.deploy = (Deploy.deploy cfg) { Deploy.env_vars = Just updatedVars } }
     
     _ <- Deploy.saveDeployConfig "lurk.yaml" newCfg
+    putStrLn $ "Generated lurk.yaml (project: " ++ projectName ++ ")"
 
     
     ghcVer <- init <$> readProcess "ghc" ["--numeric-version"] ""
     cabalVer <- init <$> readProcess "cabal" ["--numeric-version"] ""
     
-    let yaml = generateWorkflowYaml (Deploy.provider (Deploy.deploy newCfg)) (Map.keys updatedVars) ghcVer cabalVer
+    let yaml = generateWorkflowYaml (Map.keys updatedVars) ghcVer cabalVer
     TIO.writeFile ".github/workflows/deploy.yml" (T.pack yaml)
-    putStrLn "Generated/Updated .github/workflows/deploy.yml and lurk.yaml"
+    putStrLn "Generated .github/workflows/deploy.yml"
 
-generateWorkflowYaml :: String -> [String] -> String -> String -> String
-generateWorkflowYaml provider keys ghcVer cabalVer =
+generateWorkflowYaml :: [String] -> String -> String -> String
+generateWorkflowYaml keys ghcVer cabalVer =
     unlines $ 
         [ "# -----------------------------------------------------------------------------"
         , "# Lurk Framework - Automated Deployment Pipeline"
@@ -74,14 +100,11 @@ generateWorkflowYaml provider keys ghcVer cabalVer =
         , "# This workflow is triggered on every push to 'main'."
         , "#"
         , "# REQUIRED GITHUB SECRETS:"
-        , "# - LURK_YAML:    The full content of your lurk.yaml file."
-        , "# - Provider Secrets:"
-        , "#     - SSH:    DEPLOY_SSH_KEY, VPS_IP"
-        , "#     - Docker: DOCKER_USERNAME, DOCKER_PASSWORD"
-        , "# - App Secrets:  Any keys defined in your lurk.yaml 'env_vars' mapping."
+        , "# - SSH Secrets:  DEPLOY_SSH_KEY, VPS_IP, VPS_USER"
+        , "# - Docker Secrets: DOCKER_USERNAME, DOCKER_PASSWORD"
+        , "# - App Secrets:  Any keys defined in your .env or .example.env file."
         , "#"
-        , "# WHAT TO MODIFY IN THIS FILE:"
-        , "# - 'runs-on': Update to match your required runner OS (e.g., ubuntu-latest)."
+        , "# NOTE: lurk.yaml is committed to Git with ${VAR} placeholders."
         , "# -----------------------------------------------------------------------------"
         , ""
         , "name: Deploy Lurk Project"
@@ -114,9 +137,6 @@ generateWorkflowYaml provider keys ghcVer cabalVer =
          , "          restore-keys: |"
          , "            ${{ runner.os }}-cabal-"
          , ""
-         , "      - name: Create Lurk Config"
-         , "        run: echo \"${{ secrets.LURK_YAML }}\" > lurk.yaml"
-         , ""
          , "      # --- Build the Lurk CLI and Binary ---"
          , "      - name: Build"
          , "        run: cabal build lurk"
@@ -124,17 +144,12 @@ generateWorkflowYaml provider keys ghcVer cabalVer =
          , "      # --- Secrets Injection & Deployment ---"
          , "      - name: Deploy"
          , "        env:"
-         , "          # --- PROJECT SPECIFIC: Map your secrets here ---"
+         , "          # --- App Secrets ---"
         ] ++ map (\k -> "          " ++ k ++ ": ${{ secrets." ++ k ++ " }}") keys ++
-        providerSteps provider
-  where
-    providerSteps "ssh" = 
-        [ ""
-        , "          # -----------------------------------------------"
-        , "          "
-        , "          # Internal deployment key for SSH auth"
+        [ "          # --- SSH Secrets ---"
         , "          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}"
         , "          VPS_IP: ${{ secrets.VPS_IP }}"
+        , "          VPS_USER: ${{ secrets.VPS_USER }}"
         , "        run: |"
         , "          # Initialize SSH Agent for secure transfer"
         , "          eval \"$(ssh-agent -s)\""
@@ -142,28 +157,8 @@ generateWorkflowYaml provider keys ghcVer cabalVer =
         , "          mkdir -p ~/.ssh"
         , "          ssh-keyscan -H $VPS_IP >> ~/.ssh/known_hosts"
         , ""
-         , "          # Execute Lurk Deployment"
-         , "          cabal run lurk -- deploy"
-        ]
-    providerSteps "docker" = 
-        [ ""
-        , "          # -----------------------------------------------"
-        , "          "
-        , "          # Docker Registry Auth"
-        , "          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}"
-        , "          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}"
-        , "        run: |"
-        , "          echo \"$DOCKER_PASSWORD\" | docker login -u \"$DOCKER_USERNAME\" --password-stdin"
-        , ""
-         , "          # Execute Lurk Deployment"
-         , "          cabal run lurk -- deploy"
-        ]
-    providerSteps _ = 
-        [ ""
-        , "          # -----------------------------------------------"
-        , "        run: |"
-         , "          # Execute Lurk Deployment"
-         , "          cabal run lurk -- deploy"
+        , "          # Execute Lurk Deployment"
+        , "          cabal run lurk -- deploy"
         ]
 
 deployProject :: IO ()
@@ -177,16 +172,23 @@ deployProject = do
             let settings = Deploy.deploy cfg
             putStrLn $ "Using provider: " ++ Deploy.provider settings
             
-            -- Generate .env content
-            mEnvContent <- case Deploy.env_vars settings of
-                Nothing -> pure Nothing
-                Just m -> Just <$> Deploy.generateEnvContent m
-            
-            -- Run deployment
-            case Deploy.provider settings of
-                "ssh" -> runSSHDeployment (Deploy.config settings) mEnvContent
-                "docker" -> runDockerDeployment (Deploy.config settings) mEnvContent
-                _ -> putStrLn $ "Provider not supported: " ++ Deploy.provider settings
+            -- Resolve ${VAR} placeholders in config
+            resolvedConfig <- Deploy.resolveEnvVars (Deploy.config settings)
+            case resolvedConfig of
+                Left missing -> putStrLn $ "Error: Missing environment variables: " ++ unwords missing
+                Right resolvedCfg -> do
+                    let settings' = settings { Deploy.config = resolvedCfg }
+                    
+                    -- Generate .env content
+                    mEnvContent <- case Deploy.env_vars settings' of
+                        Nothing -> pure Nothing
+                        Just m -> Just <$> Deploy.generateEnvContent m
+                    
+                    -- Run deployment
+                    case Deploy.provider settings' of
+                        "ssh" -> runSSHDeployment resolvedCfg mEnvContent
+                        "docker" -> runDockerDeployment resolvedCfg mEnvContent
+                        _ -> putStrLn $ "Provider not supported: " ++ Deploy.provider settings'
 
 runSSHDeployment :: Value -> Maybe String -> IO ()
 runSSHDeployment val mEnvContent = do
@@ -255,7 +257,7 @@ killPort port = do
             mapM_ (\pid -> rawSystem "taskkill" ["/F", "/PID", pid]) pids
         "darwin" -> do
             pids <- readProcess "lsof" ["-t", "-i", ":" ++ port] ""
-            mapM_ (\pid -> when (not (null pid)) $ do
+            mapM_ (\pid -> unless (null pid) $ do
                 _ <- rawSystem "kill" ["-9", pid]
                 pure ()) (lines pids)
         _ -> do

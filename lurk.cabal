@@ -65,6 +65,7 @@ library
                       case-insensitive,
                       aeson,
                       yaml,
+                      vector,
                       process,
                       connection,
                       temporary,
