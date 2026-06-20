@@ -15,9 +15,9 @@ module Lurk.Session
     , persistSession
     ) where
 
-import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent (ThreadId, forkIO, threadDelay)
 import Control.Concurrent.STM
-import Control.Monad (foldM, forever, void)
+import Control.Monad (foldM, forever)
 import Control.Monad.IO.Class (liftIO)
 import Data.Bits (shiftR, (.&.))
 import Data.ByteString qualified as BS
@@ -231,9 +231,10 @@ persistSession FileStore{..} Session{..}
         BS.writeFile tmpPath content
         renameFile tmpPath path
 
--- | Background thread: remove expired sessions every 5 minutes
-cleanupSessions :: SessionStore -> IO ()
-cleanupSessions store = void $ forkIO $ forever $ do
+-- | Background thread: remove expired sessions every 5 minutes.
+--   Returns the 'ThreadId' so the caller can 'killThread' on shutdown.
+cleanupSessions :: SessionStore -> IO ThreadId
+cleanupSessions store = forkIO $ forever $ do
     threadDelay (5 * 60 * 1000000)
     now <- getCurrentTime
     expired <- atomically $ do
