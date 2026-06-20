@@ -11,6 +11,7 @@ import Data.Text.Encoding qualified as TE
 import Data.Time.Clock (addUTCTime, getCurrentTime)
 import Network.Wai (Middleware, Request(..))
 import Network.Wai qualified as Wai
+import System.Environment (lookupEnv)
 
 import Lurk.Session
 
@@ -78,7 +79,9 @@ newSessionAndContinue store app req respond = do
             }
     atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
     persistSession store sess
+    isProduction <- (== Just "production") <$> lookupEnv "LURK_ENV"
+    let secureFlag = if isProduction then "; Secure" else ""
     let req' = req { requestHeaders = (sessionHeader, TE.encodeUtf8 sid) : requestHeaders req }
-    let cookieVal = BC.pack $ T.unpack $ "_session_id=" <> sid <> "; Path=/; SameSite=Lax; HttpOnly"
+    let cookieVal = BC.pack $ T.unpack $ "_session_id=" <> sid <> "; Path=/; SameSite=Lax; HttpOnly" <> secureFlag
     let respond' resp = respond $ Wai.mapResponseHeaders (("Set-Cookie", cookieVal) :) resp
     app req' respond'

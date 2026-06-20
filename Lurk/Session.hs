@@ -16,6 +16,7 @@ module Lurk.Session
 
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM
+import Control.Monad (foldM, forever, void)
 import Control.Monad.IO.Class (liftIO)
 import Data.Bits (shiftR, (.&.))
 import Data.ByteString qualified as BS
@@ -23,6 +24,7 @@ import Data.ByteString.Char8 qualified as BC
 import Data.CaseInsensitive qualified as CI
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -31,9 +33,9 @@ import Data.Word (Word8)
 import System.Entropy (getEntropy)
 import System.Directory (doesDirectoryExist, createDirectoryIfMissing, doesFileExist, removeFile, listDirectory)
 import System.FilePath ((</>))
+import Text.Read (readMaybe)
 import Network.Wai (Request(..))
-import Web.Scotty (ActionM, getCookie, setHeader, request)
-import qualified Web.Scotty as Scotty
+import Web.Scotty (ActionM, request)
 
 type SessionId = Text
 
@@ -113,11 +115,6 @@ parseSessionFile _ sid content =
 parseExpiry :: String -> Maybe UTCTime
 parseExpiry s = readMaybe s
 
-readMaybe :: Read a => String -> Maybe a
-readMaybe s = case reads s of
-    [(x, "")] -> Just x
-    _          -> Nothing
-
 parseKV :: BS.ByteString -> Maybe (Text, Text)
 parseKV line
     | BC.null line = Nothing
@@ -126,18 +123,6 @@ parseKV line
         in if BC.null rest
             then Nothing
             else Just (TE.decodeUtf8 k, TE.decodeUtf8 (BC.drop 1 rest))
-
-mapMaybe :: (a -> Maybe b) -> [a] -> [b]
-mapMaybe _ [] = []
-mapMaybe f (x:xs) = case f x of
-    Just y  -> y : mapMaybe f xs
-    Nothing -> mapMaybe f xs
-
-foldM :: Monad m => (b -> a -> m b) -> b -> [a] -> m b
-foldM _ z [] = pure z
-foldM f z (x:xs) = do
-    z' <- f z x
-    foldM f z' xs
 
 -- | Generate a random 24-byte hex-encoded session ID
 newSessionId :: IO SessionId
@@ -183,7 +168,6 @@ newSession store = do
             }
     liftIO $ atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
     liftIO $ persistSession store sess
-    Scotty.setSimpleCookie "_session_id" sid
     pure sess
 
 -- | Get a value from a session
@@ -244,6 +228,3 @@ cleanupSessions store = void $ forkIO $ forever $ do
     case store of
         FileStore{..} -> mapM_ (\sid -> removeFile (storeDir </> T.unpack sid)) (Map.keys expired)
         _ -> pure ()
-  where
-    void m = m >> pure ()
-    forever a = a >> forever a
