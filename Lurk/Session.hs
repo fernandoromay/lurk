@@ -38,6 +38,10 @@ import Text.Read (readMaybe)
 import Network.Wai (Request(..))
 import Web.Scotty (ActionM, request)
 
+-- | The action monad for request handling (same as Lurk.App.Action).
+--   Defined here to avoid circular import with Lurk.App.
+type Action a = ActionM a
+
 type SessionId = Text
 
 data Session = Session
@@ -142,7 +146,7 @@ toHexByte b = BS.pack [hexChar hi, hexChar lo]
 
 -- | Get session from request. Uses X-Lurk-Session-Id header (set by session middleware).
 -- Falls back to creating a new session if header is missing.
-getSession :: SessionStore -> ActionM Session
+getSession :: SessionStore -> Action Session
 getSession store = do
     req <- request
     case TE.decodeUtf8 <$> lookup (CI.mk "X-Lurk-Session-Id") (requestHeaders req) of
@@ -158,7 +162,7 @@ getSession store = do
         Nothing -> newSession store
 
 -- | Create a new session and set the cookie
-newSession :: SessionStore -> ActionM Session
+newSession :: SessionStore -> Action Session
 newSession store = do
     now <- liftIO getCurrentTime
     sid <- liftIO newSessionId
@@ -176,7 +180,7 @@ getSessionValue :: Text -> Session -> Maybe Text
 getSessionValue key Session{..} = Map.lookup key sessionData
 
 -- | Set a value in a session
-setSessionValue :: SessionStore -> SessionId -> Text -> Text -> ActionM ()
+setSessionValue :: SessionStore -> SessionId -> Text -> Text -> Action ()
 setSessionValue store sid key val = liftIO $ do
     sessions <- atomically $ do
         sessions <- readTVar (storeSessions store)
@@ -191,7 +195,7 @@ setSessionValue store sid key val = liftIO $ do
         Nothing   -> pure ()
 
 -- | Delete a value from a session
-deleteSessionValue :: SessionStore -> SessionId -> Text -> ActionM ()
+deleteSessionValue :: SessionStore -> SessionId -> Text -> Action ()
 deleteSessionValue store sid key = liftIO $ do
     sessions <- atomically $ do
         sessions <- readTVar (storeSessions store)
