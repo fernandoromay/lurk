@@ -31,7 +31,7 @@ import Data.Text.Encoding qualified as TE
 import Data.Time.Clock (UTCTime, addUTCTime, getCurrentTime)
 import Data.Word (Word8)
 import System.Entropy (getEntropy)
-import System.Directory (doesDirectoryExist, createDirectoryIfMissing, doesFileExist, removeFile, listDirectory)
+import System.Directory (doesDirectoryExist, createDirectoryIfMissing, doesFileExist, removeFile, renameFile, listDirectory)
 import System.FilePath ((</>))
 import Text.Read (readMaybe)
 import Network.Wai (Request(..))
@@ -209,10 +209,12 @@ persistSession :: SessionStore -> Session -> IO ()
 persistSession InMemoryStore{} _ = pure ()
 persistSession FileStore{..} Session{..} = do
     let path = storeDir </> T.unpack sessionId
+    let tmpPath = path ++ ".tmp"
     let expiryLine = show sessionExpiry
     let kvLines = map (\(k, v) -> TE.encodeUtf8 k <> "=" <> TE.encodeUtf8 v) $ Map.toList sessionData
     let content = BC.pack expiryLine <> "\n" <> BC.intercalate "\n" kvLines <> "\n"
-    BS.writeFile path content
+    BS.writeFile tmpPath content
+    renameFile tmpPath path
 
 -- | Background thread: remove expired sessions every 5 minutes
 cleanupSessions :: SessionStore -> IO ()
