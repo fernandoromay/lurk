@@ -26,6 +26,7 @@ library
                       Lurk.CSRF
                       Lurk.Email.SMTP
                       Lurk.Env
+                      Lurk.Form
                       Lurk.Html
                       Lurk.Language
                       Lurk.QQ
