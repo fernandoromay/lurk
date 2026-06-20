@@ -28,6 +28,7 @@ tests = testGroup "Lurk.Session"
     , testFileStore
     , testPersistSession
     , testCleanupSessions
+    , testDestroySession
     ]
 
 testGroupId :: TestTree
@@ -319,4 +320,43 @@ testCleanupSessions = testGroup "cleanupSessions"
             Map.filter (\s -> sessionExpiry s > now2)
         sessions <- readTVarIO (storeSessions store)
         assertBool "expired removed" (Map.null sessions)
+    ]
+
+----------------------------------------------------------------------
+-- destroySession tests
+----------------------------------------------------------------------
+
+testDestroySession :: TestTree
+testDestroySession = testGroup "destroySession"
+    [ testCase "removes session from TVar" $ do
+        store <- newSessionStore
+        sid <- newSessionId
+        now <- getCurrentTime
+        let sess = Session { sessionId = sid, sessionData = Map.singleton "k" "v", sessionExpiry = addUTCTime 3600 now }
+        atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
+        destroySession store sid
+        sessions <- readTVarIO (storeSessions store)
+        assertBool "session removed" (not (Map.member sid sessions))
+    , testCase "removes session file from disk (FileStore)" $ do
+        let dir = ".test-destroy-file"
+        store <- newFileSessionStore dir
+        sid <- newSessionId
+        now <- getCurrentTime
+        let sess = Session { sessionId = sid, sessionData = Map.empty, sessionExpiry = addUTCTime 3600 now }
+        persistSession store sess
+        exists1 <- doesFileExist (dir </> T.unpack sid)
+        assertBool "file exists before destroy" exists1
+        destroySession store sid
+        exists2 <- doesFileExist (dir </> T.unpack sid)
+        assertBool "file removed after destroy" (not exists2)
+        -- also verify removed from TVar
+        sessions <- readTVarIO (storeSessions store)
+        assertBool "session removed from TVar" (not (Map.member sid sessions))
+        -- cleanup
+        removeDirectoryRecursive dir
+    , testCase "no-op for non-existent session" $ do
+        store <- newSessionStore
+        sid <- newSessionId
+        destroySession store sid  -- should not throw
+        assertBool "always passes" True
     ]

@@ -9,6 +9,7 @@ module Lurk.Session
     , getSessionValue
     , setSessionValue
     , deleteSessionValue
+    , destroySession
     , newSessionId
     , cleanupSessions
     , persistSession
@@ -203,6 +204,17 @@ deleteSessionValue store sid key = liftIO $ do
     case sessions of
         Just sess -> persistSession store sess
         Nothing   -> pure ()
+
+-- | Destroy a session completely: remove from TVar and delete file from disk.
+destroySession :: SessionStore -> SessionId -> IO ()
+destroySession store sid = do
+    atomically $ modifyTVar' (storeSessions store) (Map.delete sid)
+    case store of
+        FileStore{..} -> do
+            let path = storeDir </> T.unpack sid
+            exists <- doesFileExist path
+            if exists then removeFile path else pure ()
+        _ -> pure ()
 
 -- | Persist a session to disk (no-op for InMemoryStore).
 --   Refuses to write if the session ID contains non-hex characters (path traversal guard).
