@@ -242,6 +242,20 @@ testPersistSession = testGroup "persistSession"
         let sess = Session { sessionId = sid, sessionData = Map.empty, sessionExpiry = addUTCTime 3600 now }
         persistSession store sess  -- should not throw
         assertBool "always passes" True
+    , testCase "refuses to persist session with non-hex ID" $ do
+        let dir = ".test-persist-path-traversal"
+        store <- newFileSessionStore dir
+        now <- getCurrentTime
+        let badSid = "../../etc/passwd"
+        let sess = Session { sessionId = badSid, sessionData = Map.empty, sessionExpiry = addUTCTime 3600 now }
+        persistSession store sess
+        -- file should not exist
+        exists <- doesFileExist (dir </> T.unpack badSid)
+        assertBool "malicious file not created" (not exists)
+        files <- listDirectory dir
+        assertBool "no files written" (null files)
+        -- cleanup
+        removeDirectoryRecursive dir
     ]
 
 -- | Safe index helper

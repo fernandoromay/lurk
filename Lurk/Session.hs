@@ -204,17 +204,20 @@ deleteSessionValue store sid key = liftIO $ do
         Just sess -> persistSession store sess
         Nothing   -> pure ()
 
--- | Persist a session to disk (no-op for InMemoryStore)
+-- | Persist a session to disk (no-op for InMemoryStore).
+--   Refuses to write if the session ID contains non-hex characters (path traversal guard).
 persistSession :: SessionStore -> Session -> IO ()
 persistSession InMemoryStore{} _ = pure ()
-persistSession FileStore{..} Session{..} = do
-    let path = storeDir </> T.unpack sessionId
-    let tmpPath = path ++ ".tmp"
-    let expiryLine = show sessionExpiry
-    let kvLines = map (\(k, v) -> TE.encodeUtf8 k <> "=" <> TE.encodeUtf8 v) $ Map.toList sessionData
-    let content = BC.pack expiryLine <> "\n" <> BC.intercalate "\n" kvLines <> "\n"
-    BS.writeFile tmpPath content
-    renameFile tmpPath path
+persistSession FileStore{..} Session{..}
+    | not (T.all (`elem` ("0123456789abcdef" :: String)) sessionId) = pure ()
+    | otherwise = do
+        let path = storeDir </> T.unpack sessionId
+        let tmpPath = path ++ ".tmp"
+        let expiryLine = show sessionExpiry
+        let kvLines = map (\(k, v) -> TE.encodeUtf8 k <> "=" <> TE.encodeUtf8 v) $ Map.toList sessionData
+        let content = BC.pack expiryLine <> "\n" <> BC.intercalate "\n" kvLines <> "\n"
+        BS.writeFile tmpPath content
+        renameFile tmpPath path
 
 -- | Background thread: remove expired sessions every 5 minutes
 cleanupSessions :: SessionStore -> IO ()
