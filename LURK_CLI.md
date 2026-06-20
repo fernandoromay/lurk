@@ -11,60 +11,57 @@ Use this when you are actively coding and want to test changes in real-time.
 - **What it does**: 
   1. Loads environment variables from `.env` into the process.
   2. Scans your source directories for new Haskell modules and automatically updates the `.cabal` file to ensure they are compiled.
-  3. Executes `cabal run`.
+  3. Executes `cabal run --ghc-options=-v0` to reduce verbosity.
 
 ### `lurk build`
 **Purpose**: Local Verification.
 Use this to ensure your project compiles correctly without actually starting the server.
 
-- **What it does**: Performs the same `.env` loading and `.cabal` module updates as `run`, then executes `cabal build`.
+- **What it does**: Performs the same `.env` loading and `.cabal` module updates as `run`, then executes `cabal build --ghc-options=-v0` to reduce verbosity.
 
 ### `lurk deploy`
 **Purpose**: Production Release.
 The core engine of the framework. It executes a strictly ordered pipeline to ensure atomic deployments.
 
 **The Deployment Pipeline**:
-1. **Setup**: Provisions the remote environment. For SSH, this means creating the target directory and writing the systemd service file.
-2. **Validate**: Verifies that the destination is reachable and ready.
-3. **Package**: Runs `cabal build --minimize` to create a production-ready binary. It then uses `cabal list-bin` to find the exact path of the resulting executable, removing any hardcoded path assumptions.
-4. **Transfer**: Securely uploads the binary and the `public/` assets folder to the remote host.
-5. **Activate**: Triggers the final activation (e.g., `systemctl restart`).
+1. **Resolve**: Resolves environment variable placeholders (e.g., `${VAR}`) in the provider configuration.
+2. **Setup**: Provisions the remote environment. For SSH, this means creating the target directory and writing the systemd service file.
+3. **Validate**: Verifies that the destination is reachable and ready.
+4. **Package**: Runs `cabal build --minimize` to create a production-ready binary. It then uses `cabal list-bin` to find the exact path of the resulting executable, removing any hardcoded path assumptions.
+5. **Transfer**: Securely uploads the binary and the `public/` assets folder to the remote host.
+6. **Activate**: Triggers the final activation (e.g., `systemctl restart`).
 
 **Atomic Rollbacks**: If the `Activate` step fails, Lurk automatically attempts to restore the previous binary backup and restart the service, minimizing downtime.
 
-### `lurk deploy --init`
-**Purpose**: Workflow Bootstrapping.
-Use this once at the start of your project or when changing your deployment strategy.
+### `lurk deploy --yaml`
+**Purpose**: Configuration Bootstrapping.
+Use this to generate or update your deployment configuration file.
 
 - **What it does**:
   - Scans `.env` or `.example.env` to identify which secrets your app needs.
   - Creates/updates `lurk.yaml` with the required `env_vars` mapping.
-  - Generates a professional GitHub Actions workflow (`.github/workflows/deploy.yml`) tailored to your chosen provider.
+
+### `lurk deploy --githubaction`
+**Purpose**: Workflow Bootstrapping.
+Use this to generate the CI/CD pipeline configuration.
+
+- **What it does**:
+  - Generates a professional GitHub Actions workflow (`.github/workflows/deploy.yml`) tailored to your chosen provider, automatically plumbing necessary authentication secrets (e.g., `DEPLOY_SSH_KEY`, `VPS_IP`, `VPS_USER`).
+
+### `lurk deploy --init`
+**Purpose**: Full Workflow Bootstrapping.
+Use this once at the start of your project or when changing your deployment strategy.
+
+- **What it does**:
+  - Runs `lurk deploy --yaml` followed by `lurk deploy --githubaction` to fully bootstrap your deployment configuration and workflow in one command.
 
 ### `lurk kill [port]`
 **Purpose**: Port Recovery.
 Useful when a previous process didn't shut down correctly and is blocking your port.
-- **Usage**: `lurk kill 3000` (Defaults to 3000 if omitted).
-- **What it does**: Forcefully terminates any process holding the specified TCP port.
+- **Usage**: `lurk kill 3000` or simply `lurk kill`.
+- **What it does**: Forcefully terminates any process holding the specified TCP port across all platforms (Linux, macOS, Windows). If no port is specified, it dynamically detects the target port by checking the `PORT` environment variable, falling back to parsing `Config.hs` for `defaultPort`, and finally defaulting to `3000`.
 
 ---
-
-## ⚙️ Configuration (`lurk.yaml`)
-
-Lurk uses a single YAML file to define the "how" and "where" of your deployment.
-
-### Global Structure
-```yaml
-project: "my-app-name" # Used as the binary name and systemd service name
-build: {}              # Space for future build-time optimizations
-deploy:
-  provider: "ssh"      # One of: "ssh", "docker", "shell"
-  env_vars:            # Maps App Secret Name -> GitHub Secret Name
-    DATABASE_URL: DB_URL
-    STRIPE_KEY: STRIPE_API_KEY
-  config:              # Provider-specific settings
-    ...
-```
 
 ### Provider Deep-Dive
 
@@ -108,10 +105,9 @@ Before your first deployment, ensure:
 
 ### 2. The Setup Process
 The recommended path to production:
-1. **Configure**: Define your `lurk.yaml` (or use `lurk deploy --init` to start).
-2. **Initialize**: Run `lurk deploy --init` to generate your GitHub Action.
+1. **Configure**: Define your `lurk.yaml` (or use `lurk deploy --yaml` to start).
+2. **Initialize**: Run `lurk deploy --githubaction` to generate your GitHub Action.
 3. **Secret Setup**: 
-   - Add your `LURK_YAML` (full file content) as a GitHub Secret.
    - Add your SSH/Docker keys and App secrets to GitHub.
 4. **Push**: Commit your code and push to `main`. GitHub Actions will handle the rest.
 
@@ -123,10 +119,3 @@ The recommended path to production:
 | **Isolation** | Shared OS | High (Containers) | Low |
 | **Setup Effort** | Low | Medium | High |
 | **Best For** | Small-Medium VPS | Kubernetes/Cloud | Legacy/Custom |
-
-### 4. GitHub Actions Logic
-Lurk uses a "Secret-First" approach for public repositories. Instead of committing `lurk.yaml`, the workflow performs a **Dynamic Injection**:
-1. The Action reads the `LURK_YAML` secret.
-2. It writes this content to a physical `lurk.yaml` file in the runner's workspace.
-3. The `lurk deploy` command reads that file and executes the pipeline.
-This keeps your server IP, usernames, and internal paths completely hidden from the public.

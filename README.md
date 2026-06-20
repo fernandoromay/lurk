@@ -8,7 +8,8 @@ It is a lightweight, high-performance Haskell web framework designed for maximum
 
 - **`[lurk|...|]` Quasiquoter** — HTML templates with compile-time variable checking. Typos are build errors, not runtime blanks.
 - **Type-safe i18n** — Missing translations are compile errors. Routes are generated for all languages in one call.
-- **Session + CSRF** — File-backed sessions with automatic CSRF validation on POST routes.
+- **Session + CSRF** — File-backed sessions with automatic CSRF validation on POST routes. Secure cookies in production, atomic file writes, session ID validation.
+- **`Lurk.Flash`** — One-time session-based messages for success/error feedback.
 - **`Lurk.Form`** — Composable anti-abuse pipeline: honeypot, timing, MX verification, field length. Guards run in `Action` for session access.
 - **`Lurk.Email.SMTP`** — Self-contained SMTP client (STARTTLS/SMTPS). Zero external email library dependencies.
 - **Environment** — Opaque `Env` type with `getEnv`/`requireEnv`/`hasEnv`. Loads `.env` at startup.
@@ -25,13 +26,14 @@ lib/lurk/
 │   ├── App.hs            # runLurk — starts the Warp server
 │   ├── QQ.hs             # [lurk|...|] quasiquoter (Template Haskell)
 │   ├── Html.hs           # Html type, renderHtml, ToHtml class
+│   ├── Flash.hs          # Flash messages (one-time session data)
 │   ├── Form.hs           # FormData, FormGuard, withForm, built-in guards
 │   ├── Routes.hs         # getPages, postActions, routeSettings, notFound
 │   ├── Request.hs        # Request helpers (params, headers, cookies)
 │   ├── Env.hs            # loadEnv, getEnv, requireEnv
-│   ├── Session.hs        # File-backed session store (TVar)
+│   ├── Session.hs        # File-backed session store (TVar) with destroySession
 │   ├── Session/
-│   │   └── Middleware.hs  # WAI middleware for session handling
+│   │   └── Middleware.hs  # WAI middleware for session handling (Secure flag, eager expiry)
 │   ├── CSRF.hs           # CSRF token generation and validation
 │   ├── Cookie.hs         # Cookie helpers
 │   ├── SEO.hs            # SEO data types (title, meta, OG, structured data)
@@ -50,6 +52,7 @@ lib/lurk/
 │   ├── Main.hs
 │   ├── SessionSpec.hs
 │   ├── CSRFSpec.hs
+│   ├── FlashSpec.hs
 │   └── SMTPSpec.hs
 ├── lurk.cabal
 └── CHANGELOG.md
@@ -251,18 +254,49 @@ hasEnv env "PORT"        -- Bool
 
 ### `Lurk.Session`
 
-File-backed sessions with TVar storage:
+File-backed sessions with TVar storage. Includes `destroySession` for logout support and `cleanupSessions` for periodic expiry:
 
 ```haskell
 store <- getStore
 Session.setSessionValue store sid "key" "value"
 sess <- Session.getSession store
 val <- Session.getSessionValue "key" sess
+destroySession store sid        -- remove session (logout)
+cleanupSessions store           -- remove expired sessions
 ```
+
+Cookies use the `Secure` flag in production (detected via `LURK_ENV`). Session ID validation prevents path traversal. Atomic file writes prevent corruption.
 
 ### `Lurk.CSRF`
 
 Automatic CSRF protection on POST routes. Tokens are generated per-session and validated in middleware.
+
+### `Lurk.Flash`
+
+One-time session-based messages:
+
+```haskell
+flashSuccess "Saved!"
+flashError   "Something went wrong"
+flashWarning "Please review"
+flash        Custom "text" "Custom level message"
+msg <- getFlash :: Action (Maybe Flash)
+```
+
+Convenience helpers:
+
+```haskell
+onFlashSuccess :: Text -> Action ()
+onFlashError   :: Text -> Action ()
+onFlashWarning :: Text -> Action ()
+```
+
+Rendering with auto-dismiss:
+
+```haskell
+renderFlash :: Flash -> Html    -- includes auto-dismiss after 5s
+renderFlashMaybe :: Action Html  -- renders or empty
+```
 
 ### `Lurk.Form`
 
@@ -335,10 +369,10 @@ deploy:
 | CSRF | Automatic | Manual token | Manual | Middleware | Middleware |
 | Session | File-backed | File/Redis/DB | Cookie | Cookie/DB | Cookie/DB |
 | Form guards | Pipeline | Manual rules | Manual | Manual | Manual |
+| Flash messages | Built-in | Session flash | N/A | N/A | N/A |
 
 ## Planned
 
-- `Lurk.Flash` — Flash messages
 - `Lurk.Auth` — Authentication primitives
 - `Lurk.Email` — HTTP-based email providers (Mailgun, SendGrid, Resend)
 - `Lurk.DB` — Database/ORM layer
@@ -351,7 +385,7 @@ deploy:
 cabal test lurk-tests
 ```
 
-Tests cover session management, CSRF token handling, and SMTP error handling.
+Tests cover session management (file-backed store, atomic writes, cleanup), CSRF token handling, flash messages (data types, rendering, session integration), and SMTP error handling.
 
 ## License
 

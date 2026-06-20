@@ -4,19 +4,6 @@
 
 ## Easy (days)
 
-### `Lurk.Flash` — Flash Messages
-
-One-time session data for success/error feedback:
-
-```haskell
-flashSuccess :: Text -> Action ()
-flashError   :: Text -> Action ()
-flashWarning :: Text -> Action ()
-getFlash     :: Action (Maybe Flash)
-```
-
-Small, high-UX impact. Uses existing session system.
-
 ### Default Error Views
 
 Ship `error404View` and `error500View` in a `Lurk.Views` module. Hardcoded
@@ -26,12 +13,6 @@ their own.
 ---
 
 ## Medium (weeks)
-
-### `Lurk.Email.SMTP` — Email Sending (DONE)
-
-Implemented in `Lurk.Email.SMTP`. Types (`SmtpConfig`, `Email`, `EmailError`)
-and `sendEmail` in a single module. State-aware SMTP with response code
-verification, STARTTLS/SMTPS support, and proper error handling.
 
 ### `Lurk.Email` — HTTP-Based Providers (Future)
 
@@ -51,18 +32,6 @@ sendMail :: MailConfig -> MailMessage -> IO (Either MailError ())
 
 Receive emails via webhooks (Mailgun/SendGrid POST) or IMAP polling.
 Modern web apps use webhooks, not long-lived IMAP connections.
-
-### `Lurk.Form` — Reusable Form Processing Pipeline (DONE)
-
-Implemented in `Lurk.Form`. Architecture:
-
-- `FormData` newtype over `[(Text, Text)]` with extraction helpers (`getParam`, `getParamDef`, `requireParam`, `parseParam`).
-- `FormGuard = FormData -> Action (Either Text FormData)` — runs in `Action` for session access.
-- `withForm` / `withFormDefault` — pipeline runner: cached params → guards → handler or error callback.
-- Built-in guards: `guardHoneypot`, `guardMinSubmitTime`, `guardMxRecord`, `guardMaxLength`.
-- `setFormLoadTime` — session timestamp helper for timing guard.
-
-Guards are composable, IO-capable, and decouple security from business logic. Projects configure the guard list; the framework owns the pipeline.
 
 ### `Lurk.Opaque` — Bot-Proof Content
 
@@ -139,18 +108,6 @@ Also: `lurk create view`, `lurk create controller`, `lurk create locale`.
 
 `lurk init` or `lurk new ProjectName` generates a clean template with
 CalVer versioning, pre-configured warnings/extensions, single executable.
-
-### `lurk deploy` (DONE)
-
-CLI command `lurk deploy` is fully wired. Runs: build → package → transfer → activate, with automatic rollback on failure. Configured via `lurk.yaml`. Supports SSH, Docker, and Shell providers via the `DeployProvider` typeclass. `lurk deploy --init` generates `lurk.yaml` and GitHub Actions workflow.
-
-### `Lurk.Language` Scaffolding (Implemented)
-
-```
-lurk init language EN ES KO
-```
-
-Generates `Language.hs` with enum, `allLanguages`, `langCode`, `langName`.
 
 ### Page / Route ADT
 
@@ -263,22 +220,10 @@ Optional remote builds on VPS for projects where VPS RAM > 4GB.
 
 1. **Missing `wai-middleware-force-ssl` in `lurk.cabal`** — `App.hs:27` imports `Network.Wai.Middleware.ForceSSL` but `lurk.cabal` does not list it in `build-depends`. Will fail on clean `cabal build`.
 
-2. **`[lurk|` nesting inside `{{ }}` is broken** — GHC cannot have `|]` inside `|]` (it reads the first `|]` as the end). Use `(lurk|...|)` for all inner blocks. `[lurk|...|]` only works at the top level.
-
-3. **`?` replacement is global** — `QQ.hs:195` replaces ALL `?` characters with `__implicit_`, including inside string literals and comments. Should only replace `?` at identifier word boundaries.
+2. **`?` replacement is global** — `QQ.hs:195` replaces ALL `?` characters with `__implicit_`, including inside string literals and comments. Should only replace `?` at identifier word boundaries.
 
 ### Cleanup
 
-4. **Duplicate `process` dependency** — `lurk.cabal:66,68` lists `process` twice.
+3. **Unused dependencies** — `lurk.cabal` library section lists `mtl`, `syb`, `network`, `cookie` but no module imports them.
 
-5. **Redefined stdlib functions** — `Session.hs` redefines `mapMaybe`, `foldM`, `void`, `forever`, `readMaybe` instead of importing from `Data.Maybe`, `Control.Monad`, `Text.Read`.
-
-6. **Unused dependencies** — `lurk.cabal` library section lists `mtl`, `syb`, `network`, `cookie` but no module imports them.
-
-7. **Empty `CHANGELOG.md`** — Should be populated or removed.
-
-### Security
-
-8. **Session cookie missing `Secure` flag** — `Session/Middleware.hs:82` builds the cookie without `Secure`, meaning it will be sent over plain HTTP. Should conditionally set `Secure` in production.
-
-9. **Session file persistence not atomic** — `Session.hs:226` uses `BS.writeFile` directly. A crash during write could corrupt the session file. Should write to a temp file then `rename`.
+4. **Empty `CHANGELOG.md`** — Should be populated or removed.
