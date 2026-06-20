@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Lurk.Session.Middleware
     ( sessionMiddleware
     ) where
@@ -11,7 +12,9 @@ import Data.Text.Encoding qualified as TE
 import Data.Time.Clock (addUTCTime, getCurrentTime)
 import Network.Wai (Middleware, Request(..))
 import Network.Wai qualified as Wai
+import System.Directory (doesFileExist, removeFile)
 import System.Environment (lookupEnv)
+import System.FilePath ((</>))
 
 import Lurk.Session
 
@@ -33,7 +36,10 @@ sessionMiddleware store app req respond = do
                     now <- getCurrentTime
                     if sessionExpiry sess > now
                         then continueWithSession sid app req respond
-                        else newSessionAndContinue store app req respond
+                        else do
+                            atomically $ modifyTVar' (storeSessions store) (Map.delete sid)
+                            removeSessionFile store sid
+                            newSessionAndContinue store app req respond
                 Nothing -> newSessionAndContinue store app req respond
         Nothing -> newSessionAndContinue store app req respond
 
@@ -85,3 +91,11 @@ newSessionAndContinue store app req respond = do
     let cookieVal = BC.pack $ T.unpack $ "_session_id=" <> sid <> "; Path=/; SameSite=Lax; HttpOnly" <> secureFlag
     let respond' resp = respond $ Wai.mapResponseHeaders (("Set-Cookie", cookieVal) :) resp
     app req' respond'
+
+-- | Remove session file from disk if store is FileStore (best-effort)
+removeSessionFile :: SessionStore -> SessionId -> IO ()
+removeSessionFile FileStore{..} sid = do
+    let path = storeDir </> T.unpack sid
+    exists <- doesFileExist path
+    if exists then removeFile path else pure ()
+removeSessionFile _ _ = pure ()
