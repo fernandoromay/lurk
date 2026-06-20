@@ -9,8 +9,10 @@ It is a lightweight, high-performance Haskell web framework designed for maximum
 - **`[lurk|...|]` Quasiquoter** — HTML templates with compile-time variable checking. Typos are build errors, not runtime blanks.
 - **Type-safe i18n** — Missing translations are compile errors. Routes are generated for all languages in one call.
 - **Session + CSRF** — File-backed sessions with automatic CSRF validation on POST routes.
+- **`Lurk.Form`** — Composable anti-abuse pipeline: honeypot, timing, MX verification, field length. Guards run in `Action` for session access.
+- **`Lurk.Email.SMTP`** — Self-contained SMTP client (STARTTLS/SMTPS). Zero external email library dependencies.
 - **Environment** — Opaque `Env` type with `getEnv`/`requireEnv`/`hasEnv`. Loads `.env` at startup.
-- **Deployment** — `lurk deploy` builds a binary and deploys it via SSH or Docker.
+- **Deployment** — `lurk deploy` builds a binary and deploys it via SSH, Docker, or custom shell scripts.
 - **Static assets** — `mkAssetPath` for fingerprinted asset URLs.
 - **SEO** — Structured data types for title, meta, canonical, OpenGraph, structured data.
 
@@ -23,6 +25,7 @@ lib/lurk/
 │   ├── App.hs            # runLurk — starts the Warp server
 │   ├── QQ.hs             # [lurk|...|] quasiquoter (Template Haskell)
 │   ├── Html.hs           # Html type, renderHtml, ToHtml class
+│   ├── Form.hs           # FormData, FormGuard, withForm, built-in guards
 │   ├── Routes.hs         # getPages, postActions, routeSettings, notFound
 │   ├── Request.hs        # Request helpers (params, headers, cookies)
 │   ├── Env.hs            # loadEnv, getEnv, requireEnv
@@ -34,17 +37,20 @@ lib/lurk/
 │   ├── SEO.hs            # SEO data types (title, meta, OG, structured data)
 │   ├── Assets.hs         # mkAssetPath, fingerprinted asset URLs
 │   ├── Language.hs        # Language typeclass for i18n
+│   ├── Email/
+│   │   └── SMTP.hs       # Self-contained SMTP client (STARTTLS/SMTPS)
 │   ├── Deploy.hs         # DeployProvider typeclass
 │   └── Deploy/
 │       ├── SSH.hs        # SSH deployment provider
 │       ├── Docker.hs     # Docker deployment provider
 │       └── Shell.hs      # Shell command runner
 ├── cli/
-│   └── Main.hs           # `lurk` CLI (deploy, build)
+│   └── Main.hs           # `lurk` CLI (deploy, build, run, kill)
 ├── test/
 │   ├── Main.hs
 │   ├── SessionSpec.hs
-│   └── CSRFSpec.hs
+│   ├── CSRFSpec.hs
+│   └── SMTPSpec.hs
 ├── lurk.cabal
 └── CHANGELOG.md
 ```
@@ -106,18 +112,21 @@ Variables are checked at compile time. A typo like `{{heroTitel}}` fails the bui
 ```haskell
 contactPostAction :: Language -> Action ()
 contactPostAction lang = do
-    params <- readFormParams
-
-    -- Anti-abuse checks
-    let honeypot = lookupParam "b_website" params
-    unless (T.null honeypot) $ redirect "/404/"
-
-    tooFast <- checkTimeToSubmit 3 params
-    unless tooFast $ redirect "/404/"
-
-    -- Process form...
-    redirect "/thanks/"
+    withForm
+        [ guardHoneypot "b_website" "/404/"
+        , guardMinSubmitTime 3 "/404/"
+        , guardMxRecord "email" "/404/"
+        , guardMaxLength "name" 200 "/404/"
+        ]
+        (\_ -> redirect "/404/")   -- error handler
+        $ \fd -> do                 -- validated form data
+            let name  = getParamDef "name" "" fd
+                email = getParamDef "email" "" fd
+            -- Process form...
+            redirect "/thanks/"
 ```
+
+Guards run in sequence. First failure triggers the error handler. `FormData` wraps the parsed params with typed extraction helpers.
 
 ### 5. Load environment config
 
@@ -177,36 +186,21 @@ Multi-line expressions work too:
 
 ### Nested Quasiquoters
 
-Two syntaxes for embedding inner HTML blocks:
-
-**`[lurk|...|]`** — bracket nesting (for use inside `{{ }}` expressions):
+Use **(lurk|...|)** for embedding inner HTML blocks inside `{{ }}` expressions:
 
 ```haskell
 [lurk|
   <ul>
-    {{foldMap (\item -> [lurk|
+    {{forEach items (\item -> (lurk|
       <li>{{item.title}}</li>
-    |]) items}}
+    |))}}
   </ul>
 |]
 ```
 
-**(lurk|...|)** — parenthesis nesting (for inline lambdas):
+Parenthesis nesting tracks depth — inner blocks can contain further nested `(lurk|...|)` without escaping issues.
 
-```haskell
-[lurk|
-  <div class="agents">
-    {{forEach agents (\a -> (lurk|
-      <div class="agent-card">
-        <h4>{{a.name}}</h4>
-        <p>{{a.description}}</p>
-      </div>
-    |))}}
-  </div>
-|]
-```
-
-Both track nesting depth — inner blocks can contain further nested `[lurk|...|]` or `(lurk|...|)` without escaping issues.
+> **Note:** `[lurk|...|]` nesting inside `{{ }}` is broken. GHC cannot parse `|]` inside `|]`. Always use `(lurk|...|)` for inner blocks.
 
 ### `forEach` / `forEachWithIndex`
 
@@ -270,6 +264,38 @@ val <- Session.getSessionValue "key" sess
 
 Automatic CSRF protection on POST routes. Tokens are generated per-session and validated in middleware.
 
+### `Lurk.Form`
+
+Composable form processing with built-in security guards:
+
+```haskell
+-- Extraction helpers
+getParam       :: Text -> FormData -> Maybe Text
+getParamDef    :: Text -> Text -> FormData -> Text
+requireParam   :: Text -> Text -> FormData -> Action Text
+parseParam     :: Read a => Text -> FormData -> Maybe a
+
+-- Pipeline runner
+withForm :: [FormGuard] -> (Text -> Action ()) -> (FormData -> Action ()) -> Action ()
+withFormDefault :: [FormGuard] -> (FormData -> Action ()) -> Action ()
+
+-- Built-in guards
+guardHoneypot      :: Text -> Text -> FormGuard       -- hidden field must be empty
+guardMinSubmitTime :: Int -> Text -> FormGuard          -- session-backed timing check
+guardMxRecord      :: Text -> Text -> FormGuard        -- DNS MX verification
+guardMaxLength     :: Text -> Int -> Text -> FormGuard  -- field length limit
+```
+
+### `Lurk.Email.SMTP`
+
+Self-contained SMTP client with no external email library dependencies:
+
+```haskell
+sendEmail :: SmtpConfig -> Email -> IO (Either EmailError ())
+```
+
+Supports STARTTLS (port 587) and SMTPS (port 465) with automatic detection. Includes AUTH LOGIN, multi-line response parsing, and 30-second timeout.
+
 ### `Lurk.Deploy`
 
 ```haskell
@@ -308,13 +334,13 @@ deploy:
 | i18n safety | Compile error | Runtime | Runtime | Runtime | Runtime |
 | CSRF | Automatic | Manual token | Manual | Middleware | Middleware |
 | Session | File-backed | File/Redis/DB | Cookie | Cookie/DB | Cookie/DB |
+| Form guards | Pipeline | Manual rules | Manual | Manual | Manual |
 
 ## Planned
 
-- `Lurk.Form` — Form handling with anti-abuse built-in
-- `Lurk.Mail` — Email abstraction layer
 - `Lurk.Flash` — Flash messages
 - `Lurk.Auth` — Authentication primitives
+- `Lurk.Email` — HTTP-based email providers (Mailgun, SendGrid, Resend)
 - `Lurk.DB` — Database/ORM layer
 - `Lurk.WebSocket` — WebSocket support
 - `lurk create page` — CLI scaffolding
@@ -325,7 +351,7 @@ deploy:
 cabal test lurk-tests
 ```
 
-Tests cover session management and CSRF token handling.
+Tests cover session management, CSRF token handling, and SMTP error handling.
 
 ## License
 

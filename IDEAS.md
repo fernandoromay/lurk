@@ -39,7 +39,7 @@ Extend the email namespace with API-based providers:
 
 ```haskell
 data MailConfig
-    = SMTPConfig { ... }       -- done
+    = SMTPConfig { ... }       -- done (Lurk.Email.SMTP)
     | MailgunConfig { apiKey :: Text, domain :: Text }
     | SendgridConfig { apiKey :: Text }
     | ResendConfig { apiKey :: Text }
@@ -52,24 +52,17 @@ sendMail :: MailConfig -> MailMessage -> IO (Either MailError ())
 Receive emails via webhooks (Mailgun/SendGrid POST) or IMAP polling.
 Modern web apps use webhooks, not long-lived IMAP connections.
 
-### `Lurk.Form` — Reusable Form Processing Pipeline
+### `Lurk.Form` — Reusable Form Processing Pipeline (DONE)
 
-Every form handler repeats: honeypot, time-check, MX-verify, CSRF.
-`Lurk.Form` eliminates that duplication:
+Implemented in `Lurk.Form`. Architecture:
 
-```haskell
-data FormConfig = FormConfig
-    { fcStore         :: SessionStore
-    , fcHoneypotField :: Text
-    , fcMinSeconds    :: Int
-    , fcRedirect      :: Text
-    , fcHandler       :: [(Text,Text)] -> Action ()
-    }
+- `FormData` newtype over `[(Text, Text)]` with extraction helpers (`getParam`, `getParamDef`, `requireParam`, `parseParam`).
+- `FormGuard = FormData -> Action (Either Text FormData)` — runs in `Action` for session access.
+- `withForm` / `withFormDefault` — pipeline runner: cached params → guards → handler or error callback.
+- Built-in guards: `guardHoneypot`, `guardMinSubmitTime`, `guardMxRecord`, `guardMaxLength`.
+- `setFormLoadTime` — session timestamp helper for timing guard.
 
-processForm :: FormConfig -> Action ()
-```
-
-Framework owns security. Project owns business logic.
+Guards are composable, IO-capable, and decouple security from business logic. Projects configure the guard list; the framework owns the pipeline.
 
 ### `Lurk.Opaque` — Bot-Proof Content
 
@@ -89,7 +82,7 @@ renderOpaque :: Bool -> Opaque -> Text  -- True = bot, False = human
 |]
 ```
 
-The view decides what gets protected. Not invisible middleware.
+The view decides what gets protected. Not invisible middleware. It can even be generalized to obfuscate forms or other sensitive elements, reducing the risk of bots reaching out.
 
 ### `Lurk.Cloudflare` — Typed Cloudflare Headers
 
@@ -147,12 +140,11 @@ Also: `lurk create view`, `lurk create controller`, `lurk create locale`.
 `lurk init` or `lurk new ProjectName` generates a clean template with
 CalVer versioning, pre-configured warnings/extensions, single executable.
 
-### `lurk deploy`
+### `lurk deploy` (DONE)
 
-Automates: build → SSH transfer → systemd restart. The `DeployProvider`
-typeclass already exists. Needs CLI wiring.
+CLI command `lurk deploy` is fully wired. Runs: build → package → transfer → activate, with automatic rollback on failure. Configured via `lurk.yaml`. Supports SSH, Docker, and Shell providers via the `DeployProvider` typeclass. `lurk deploy --init` generates `lurk.yaml` and GitHub Actions workflow.
 
-### `Lurk.Language` Scaffolding
+### `Lurk.Language` Scaffolding (Implemented)
 
 ```
 lurk init language EN ES KO
@@ -271,7 +263,7 @@ Optional remote builds on VPS for projects where VPS RAM > 4GB.
 
 1. **Missing `wai-middleware-force-ssl` in `lurk.cabal`** — `App.hs:27` imports `Network.Wai.Middleware.ForceSSL` but `lurk.cabal` does not list it in `build-depends`. Will fail on clean `cabal build`.
 
-2. **`[lurk|` nesting inside `{{ }}` is broken** — `extractInnerLurks` in `QQ.hs:206` only handles `(lurk|`. This is intentional: GHC cannot have `|]` inside `|]` (it reads the first `|]` as the end). Bracket nesting is documented in README but will fail at compile time.
+2. **`[lurk|` nesting inside `{{ }}` is broken** — GHC cannot have `|]` inside `|]` (it reads the first `|]` as the end). Use `(lurk|...|)` for all inner blocks. `[lurk|...|]` only works at the top level.
 
 3. **`?` replacement is global** — `QQ.hs:195` replaces ALL `?` characters with `__implicit_`, including inside string literals and comments. Should only replace `?` at identifier word boundaries.
 
