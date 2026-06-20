@@ -106,7 +106,10 @@ test-suite lurk-tests
                       tasty,
                       tasty-hunit,
                       text,
+                      bytestring,
                       containers,
                       time,
+                      directory,
+                      filepath,
                       entropy,
                       stm
