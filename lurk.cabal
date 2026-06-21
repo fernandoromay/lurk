@@ -102,6 +102,7 @@ test-suite lurk-tests
                       CSRFSpec
                       SMTPSpec
                       FlashSpec
+                      RequestSpec
     hs-source-dirs:   test
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
     build-depends:    base >=4.17.2.1,

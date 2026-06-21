@@ -24,6 +24,8 @@ module Lurk.Prelude
     , preferredLanguages
     , cfCountry
     , resolveLanguage
+    , clientIp
+    , ipChain
     , contextValue
     , getCookie
     , setCookie
@@ -93,7 +95,7 @@ import Lurk.Assets (asset, mkAssetPath)
 import Lurk.Html (Html, ToHtml (..), renderHtml, forEach, forEachWithIndex)
 import Lurk.QQ (lurk)
 import Lurk.Routes (isSubpath, currentPath, trailingSlash)
-import Lurk.Request (preferredLanguages, cfCountry, resolveLanguage)
+import Lurk.Request (preferredLanguages, cfCountry, resolveLanguage, clientIp, ipChain)
 import Lurk.Cookie (getCookie, setCookie, setSimpleCookie, deleteCookie)
 import Lurk.Session (SessionId, Session(..), SessionStore, newSessionStore, getSession, getSessionValue, setSessionValue, deleteSessionValue, destroySession, newSessionId, cleanupSessions, readSessionMaxAge)
 import Lurk.CSRF (CsrfToken, newCsrfToken, getCsrfToken, validateCsrfToken, getSessionIdFromHeaders, cacheFormBody, lookupCachedFormParam, getCachedFormParams)
