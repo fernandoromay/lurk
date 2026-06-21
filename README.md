@@ -2,7 +2,9 @@
 
 Lurk is the **L**ean **U**nified **R**endering **K**ernel.
 
-It is a lightweight, high-performance Haskell web framework designed for maximum developer experience and uncompromising type safety. Lurk compiles your entire application—including HTML templates and multi-language routing—into a single native binary. With instant cold starts, a minimal ~10MB memory footprint, and compile-time variable checking, Lurk catches template typos and missing translations before the code ever runs.
+Lurk is a lightweight, high-performance Haskell web framework built for **any** Haskell developer. It provides a complete toolkit—HTML templates with compile-time checking, sessions, CSRF protection, form handling, i18n routing, email, and deployment—so you can build type-safe web applications without gluing together a dozen libraries.
+
+Lurk compiles your entire application—including HTML templates and multi-language routing—into a single native binary. With instant cold starts, a minimal ~10MB memory footprint, and compile-time variable checking, Lurk catches template typos and missing translations before the code ever runs.
 
 ## Features
 
