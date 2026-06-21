@@ -84,7 +84,6 @@ newSessionAndContinue store app req respond = do
             , sessionExpiry = addUTCTime 86400 now
             }
     atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
-    persistSession store sess
     isProduction <- (== Just "production") <$> lookupEnv "LURK_ENV"
     let secureFlag = if isProduction then "; Secure" else ""
     let req' = req { requestHeaders = (sessionHeader, TE.encodeUtf8 sid) : requestHeaders req }

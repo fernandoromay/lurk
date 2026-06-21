@@ -172,7 +172,6 @@ newSession store = do
             , sessionExpiry = addUTCTime (fromIntegral $ storeTTL store) now
             }
     liftIO $ atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
-    liftIO $ persistSession store sess
     pure sess
 
 -- | Get a value from a session
