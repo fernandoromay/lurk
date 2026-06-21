@@ -1,15 +1,27 @@
-module Lurk.Routes where
+module Lurk.Routes
+    ( currentPath
+    , isSubpath
+    , trailingSlash
+    , redirect
+    ) where
 
 import Data.ByteString qualified as BS
+import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
+import Data.Text.Lazy qualified as TL
 import Network.HTTP.Types (status301)
 import Network.Wai (rawPathInfo, rawQueryString, responseBuilder)
 import Network.Wai qualified as Wai
-import Web.Scotty
+import Web.Scotty qualified as Scotty
 
-currentPath :: ActionM T.Text
-currentPath = TE.decodeUtf8 . rawPathInfo <$> request
+-- | Redirect to the given path (strict 'Text').
+--   Wraps Scotty's redirect which expects lazy 'Text'.
+redirect :: Text -> Scotty.ActionM a
+redirect = Scotty.redirect . TL.fromStrict
+
+currentPath :: Scotty.ActionM T.Text
+currentPath = TE.decodeUtf8 . rawPathInfo <$> Scotty.request
 
 isSubpath :: T.Text -> T.Text -> Bool
 isSubpath = T.isPrefixOf

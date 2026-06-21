@@ -95,7 +95,7 @@ import Data.Text.Lazy qualified as TL
 import Lurk.Assets (asset, mkAssetPath)
 import Lurk.Html (Html, ToHtml (..), renderHtml, forEach, forEachWithIndex)
 import Lurk.QQ (lurk)
-import Lurk.Routes (isSubpath, currentPath, trailingSlash)
+import Lurk.Routes (isSubpath, currentPath, trailingSlash, redirect)
 import Lurk.Request (preferredLanguages, cfCountry, resolveLanguage, clientIp, ipChain)
 import Lurk.Cookie (getCookie, setCookie, setSimpleCookie, deleteCookie)
 import Lurk.Session (SessionId, Session(..), SessionStore, newSessionStore, getSession, getSessionValue, setSessionValue, deleteSessionValue, destroySession, newSessionId, cleanupSessions, readSessionMaxAge)
@@ -104,7 +104,7 @@ import Lurk.Flash (FlashLevel(..), Flash(..), setFlash, getFlash, flashSuccess, 
 import Lurk.Env (Env, loadEnv, loadEnvFile, getEnv, getEnvInt, getEnvBool, getEnvWithDefault, requireEnv, hasEnv)
 import Lurk.SEO
 import Lurk.App (LurkApp, Action, getPage, getPages, postAction, postActions, routeSettings, runLurk, RouteOption(..), getStore, getAppEnv)
-import Web.Scotty (html, queryParam, redirect)
+import Web.Scotty (html, queryParam)
 import Web.Scotty qualified as Scotty
 import Network.HTTP.Types qualified as Http
 import Prelude
