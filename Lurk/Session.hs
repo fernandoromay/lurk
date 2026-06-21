@@ -13,16 +13,18 @@ module Lurk.Session
     , newSessionId
     , cleanupSessions
     , persistSession
+    , readSessionMaxAge
     ) where
 
 import Control.Concurrent (ThreadId, forkIO, threadDelay)
 import Control.Concurrent.STM
-import Control.Monad (foldM, forever)
+import Control.Monad (foldM, forever, when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Bits (shiftR, (.&.))
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BC
 import Data.CaseInsensitive qualified as CI
+import Data.Foldable (for_)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (mapMaybe)
@@ -35,6 +37,7 @@ import System.Entropy (getEntropy)
 import System.Directory (doesDirectoryExist, createDirectoryIfMissing, doesFileExist, removeFile, renameFile, listDirectory)
 import System.FilePath ((</>))
 import Text.Read (readMaybe)
+import System.Environment (lookupEnv)
 import Network.Wai (Request(..))
 import Web.Scotty (ActionM, request)
 
@@ -61,22 +64,32 @@ data SessionStore
         , storeDir      :: FilePath
         }
 
--- | Create a new in-memory session store (24-hour TTL)
-newSessionStore :: IO SessionStore
-newSessionStore = InMemoryStore
-    <$> newTVarIO Map.empty
-    <*> pure 86400
+-- | Read SESSION_MAX_AGE from the environment (seconds). Defaults to 86400 (24h).
+readSessionMaxAge :: IO Int
+readSessionMaxAge = do
+    mVal <- lookupEnv "SESSION_MAX_AGE"
+    case mVal >>= readMaybe of
+        Just n | n > 0 -> pure n
+        _              -> pure 86400
 
--- | Create a file-backed session store (24-hour TTL)
+-- | Create a new in-memory session store
+newSessionStore :: IO SessionStore
+newSessionStore = do
+    ttl <- readSessionMaxAge
+    InMemoryStore
+        <$> newTVarIO Map.empty
+        <*> pure ttl
+
+-- | Create a file-backed session store
 newFileSessionStore :: FilePath -> IO SessionStore
 newFileSessionStore dir = do
     createDirectoryIfMissing True dir
     sessions <- loadAllSessions dir
-    store <- FileStore
+    ttl <- readSessionMaxAge
+    FileStore
         <$> newTVarIO sessions
-        <*> pure 86400
+        <*> pure ttl
         <*> pure dir
-    pure store
 
 -- | Load all session files from disk into a Map
 loadAllSessions :: FilePath -> IO (Map SessionId Session)
@@ -84,7 +97,7 @@ loadAllSessions dir = do
     exists <- doesDirectoryExist dir
     if not exists then pure Map.empty else do
         files <- listDirectory dir
-        let sessionFiles = filter (\f -> not (f `elem` [".", ".."])) files
+        let sessionFiles = filter (\f -> f `notElem` [".", ".."]) files
         now <- getCurrentTime
         foldM (loadOneSession now dir) Map.empty sessionFiles
   where
@@ -118,7 +131,7 @@ parseSessionFile _ sid content =
         [] -> Nothing
 
 parseExpiry :: String -> Maybe UTCTime
-parseExpiry s = readMaybe s
+parseExpiry = readMaybe
 
 parseKV :: BS.ByteString -> Maybe (Text, Text)
 parseKV line
@@ -189,9 +202,7 @@ setSessionValue store sid key val = liftIO $ do
                 writeTVar (storeSessions store) (Map.insert sid updated sessions)
                 pure (Just updated)
             Nothing -> pure Nothing
-    case sessions of
-        Just sess -> persistSession store sess
-        Nothing   -> pure ()
+    for_ sessions (persistSession store)
 
 -- | Delete a value from a session
 deleteSessionValue :: SessionStore -> SessionId -> Text -> Action ()
@@ -204,9 +215,7 @@ deleteSessionValue store sid key = liftIO $ do
                 writeTVar (storeSessions store) (Map.insert sid updated sessions)
                 pure (Just updated)
             Nothing -> pure Nothing
-    case sessions of
-        Just sess -> persistSession store sess
-        Nothing   -> pure ()
+    for_ sessions (persistSession store)
 
 -- | Destroy a session completely: remove from TVar and delete file from disk.
 destroySession :: SessionStore -> SessionId -> IO ()
@@ -216,7 +225,7 @@ destroySession store sid = do
         FileStore{..} -> do
             let path = storeDir </> T.unpack sid
             exists <- doesFileExist path
-            if exists then removeFile path else pure ()
+            when exists $ removeFile path
         _ -> pure ()
 
 -- | Persist a session to disk (no-op for InMemoryStore).

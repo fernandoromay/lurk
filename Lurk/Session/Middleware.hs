@@ -81,7 +81,7 @@ newSessionAndContinue store app req respond = do
     let sess = Session
             { sessionId     = sid
             , sessionData   = Map.empty
-            , sessionExpiry = addUTCTime 86400 now
+            , sessionExpiry = addUTCTime (fromIntegral $ storeTTL store) now
             }
     atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
     isProduction <- (== Just "production") <$> lookupEnv "LURK_ENV"
