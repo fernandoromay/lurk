@@ -28,6 +28,7 @@ library
                       Lurk.Env
                       Lurk.Flash
                       Lurk.Form
+                      Lurk.Log
                       Lurk.Html
                       Lurk.Language
                       Lurk.QQ
