@@ -33,7 +33,7 @@
 | Type safety           | Compile-time      | Runtime           | Compile-time (TS) | Runtime           | Runtime           |
 | Template syntax       | `[lurk\|...\|]` QQ | Blade `{{ }}`     | JSX `{}`          | Jinja `{{ }}`     | ERB `<%= %>`      |
 | Template control flow | `@if`/`@forEach`  | `@if`/`@foreach`  | `{condition && }` | `{% if %}`        | `<% if %>`        |
-| Component model       | Planned           | Blade components  | React components  | Template inheritance | Partials       |
+| Component model       | Native functions  | Blade components  | React components  | Template inheritance | Partials       |
 | Variable interpolation| `{{expr}}`        | `{{ $var }}`      | `{var}`           | `{{ var }}`       | `<%= var %>`      |
 | CSS/JS in templates   | `{{expr}}`        | Just works        | Just works        | Just works        | Just works        |
 
@@ -316,7 +316,7 @@
 
 1. **No CLI scaffolding** — Laravel has `artisan make:*`, Django has `startapp`. Lurk requires manual file creation. (Planned: `lurk create page`)
 
-2. **No component model** — Blade has `<x-button>`, React has `<Button />`. Lurk has functions. (Planned: `@include` in QQ)
+2. ~~**No component model**~~ — **CLOSED. Not necessary.** Blade has `<x-button>`, React has `<Button />`. Lurk has native functions.
 
 3. ~~**No email abstraction**~~ — **CLOSED.** `Lurk.Email.SMTP` provides self-contained SMTP with STARTTLS/SMTPS.
 
