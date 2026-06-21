@@ -6,9 +6,9 @@ module Lurk.Prelude
     , Map
     , liftIO
     , Action
-    , captureParam
     , queryParam
-    , formParam
+    , html
+    , redirect
     , lurk
     , renderHtml
     , forEach
@@ -104,7 +104,7 @@ import Lurk.Flash (FlashLevel(..), Flash(..), setFlash, getFlash, flashSuccess, 
 import Lurk.Env (Env, loadEnv, loadEnvFile, getEnv, getEnvInt, getEnvBool, getEnvWithDefault, requireEnv, hasEnv)
 import Lurk.SEO
 import Lurk.App (LurkApp, Action, getPage, getPages, postAction, postActions, routeSettings, runLurk, RouteOption(..), getStore, getAppEnv)
-import Web.Scotty (captureParam, formParam, html, queryParam)
+import Web.Scotty (html, queryParam, redirect)
 import Web.Scotty qualified as Scotty
 import Network.HTTP.Types qualified as Http
 import Prelude
