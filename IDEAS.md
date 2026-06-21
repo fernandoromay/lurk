@@ -214,6 +214,48 @@ Optional remote builds on VPS for projects where VPS RAM > 4GB.
 
 ---
 
+## Lurk Deployment Roadmap & Ideas
+
+### 1. Verification & Health Checks
+Deployment isn't finished when the service restarts; it's finished when the app is actually serving traffic.
+- **Post-Deployment Probe**: Implement a `verify :: p -> IO (Either DeployError ())` method in `DeployProvider`.
+- **HTTP Health Check**: The CLI should hit a configured `/health` endpoint. If it doesn't return 200 OK within N seconds, trigger an automatic rollback.
+- **Log Tailing**: Optionally stream the last 20 lines of the remote log if `activate` fails to give the dev immediate feedback.
+
+### 2. Pre-Deployment Guardrails
+Shift-left verification to prevent broken binaries from ever touching the server.
+- **Test Integration**: Add an optional `test_cmd` to `lurk.yaml`. The pipeline should execute this (e.g., `cabal test`) and abort the deployment if tests fail.
+- **Binary Validation**: For SSH, run a quick version check or `--version` command on the compiled binary before transfer to ensure it's compatible with the target architecture.
+
+### 3. Broadening the Provider Ecosystem
+Move beyond VPS and Containers into managed ecosystems.
+- **PaaS Providers**: 
+  - **Heroku/Railway/Render**: Implement providers that use their respective CLIs or APIs to trigger builds and deployments.
+  - **Static Hosting**: A provider for S3/Cloudflare Pages/Netlify for purely static assets.
+- **Cloud-Native**: 
+  - **AWS ECS/Lambda**: Integration with AWS CLI for task updates.
+  - **Google Cloud Run**: Direct integration for containerized serverless.
+
+### 4. Advanced Release Strategies
+Move from "Restart" to "Zero Downtime".
+- **Blue-Green Deployment**: For SSH, deploy to a sibling directory and update a symbolic link to the new version instantly.
+- **Canary Releases**: (Docker/K8s) Route a small percentage of traffic to the new version before full rollout.
+- **Database Migrations**: Integrate a `migration_cmd` that runs *after* the binary is transferred but *before* the service is activated.
+
+### 5. User Experience & Tooling
+- **`lurk init`**: Generate a base `lurk.yaml` and add it to `.gitignore` automatically.
+- **Interactive Setup**: A wizard-style `lurk setup` that tests SSH connectivity and prompts for the correct paths/service names.
+- **Progress Visualization**: Replace standard output with a progress bar and colored status indicators for each pipeline step.
+
+### 6. Free Tier Integration (Testing Ecosystem)
+To test the full suite of Lurk providers without infrastructure costs:
+- **Oracle Cloud (Always Free)**: Primary target for multi-node testing (24GB RAM).
+- **Google Cloud Run (Serverless)**: Test the Docker provider without managing a cluster (2M req/mo free).
+- **Play with K8s/Docker**: Fast, ephemeral labs for CI/CD pipeline validation.
+- **GitHub Packages (GHCR)**: Free OCI registry for testing Docker pushes in CI.
+
+---
+
 ## Issues Found
 
 ### Critical
