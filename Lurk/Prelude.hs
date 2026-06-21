@@ -47,6 +47,7 @@ module Lurk.Prelude
     , Env
     , getEnv
     , getEnvInt
+    , getEnvBool
     , getEnvWithDefault
     , requireEnv
     , hasEnv
@@ -100,7 +101,7 @@ import Lurk.Cookie (getCookie, setCookie, setSimpleCookie, deleteCookie)
 import Lurk.Session (SessionId, Session(..), SessionStore, newSessionStore, getSession, getSessionValue, setSessionValue, deleteSessionValue, destroySession, newSessionId, cleanupSessions, readSessionMaxAge)
 import Lurk.CSRF (CsrfToken, newCsrfToken, getCsrfToken, validateCsrfToken, getSessionIdFromHeaders, cacheFormBody, lookupCachedFormParam, getCachedFormParams)
 import Lurk.Flash (FlashLevel(..), Flash(..), setFlash, getFlash, flashSuccess, flashError, flashWarning, renderFlash, renderFlashMaybe)
-import Lurk.Env (Env, loadEnv, loadEnvFile, getEnv, getEnvInt, getEnvWithDefault, requireEnv, hasEnv)
+import Lurk.Env (Env, loadEnv, loadEnvFile, getEnv, getEnvInt, getEnvBool, getEnvWithDefault, requireEnv, hasEnv)
 import Lurk.SEO
 import Lurk.App (LurkApp, Action, getPage, getPages, postAction, postActions, routeSettings, runLurk, RouteOption(..), getStore, getAppEnv)
 import Web.Scotty (captureParam, formParam, html, queryParam)

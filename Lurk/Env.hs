@@ -12,6 +12,7 @@ module Lurk.Env
     , getEnv
     , getEnvWithDefault
     , getEnvInt
+    , getEnvBool
     , requireEnv
     , hasEnv
     ) where
@@ -105,3 +106,15 @@ getEnvInt env key = case getEnv env key of
     Just val -> case reads (T.unpack val) of
         [(x, "")] -> Just x
         _         -> Nothing
+
+-- | Look up a variable and parse it as Bool. Returns Nothing if missing or unparseable.
+-- Accepts @true@, @false@, @1@, @0@ (case-insensitive).
+getEnvBool :: Env -> Text -> Maybe Bool
+getEnvBool env key = case getEnv env key of
+    Nothing -> Nothing
+    Just val -> case T.toLower (T.strip val) of
+        "true"  -> Just True
+        "false" -> Just False
+        "1"     -> Just True
+        "0"     -> Just False
+        _       -> Nothing
