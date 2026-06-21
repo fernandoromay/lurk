@@ -18,7 +18,7 @@ import qualified Data.Text as T
 import System.IO.Unsafe (unsafePerformIO)
 import System.Environment (lookupEnv)
 import Lurk.Routes (trailingSlash)
-import Lurk.Session (SessionStore, newFileSessionStore)
+import Lurk.Session (SessionStore, newFileSessionStore, cleanupSessions)
 import Lurk.Session.Middleware (sessionMiddleware)
 import Lurk.CSRF (csrfMiddleware)
 import Lurk.Env (Env)
@@ -88,6 +88,7 @@ runLurk port app = do
     atomically $ writeTVar envRef (Just env)
     store <- newFileSessionStore ".lurk-sessions"
     atomically $ writeTVar storeRef (Just store)
+    _ <- cleanupSessions store
     scotty port $ do
         middleware (sessionMiddleware store)
         middleware (csrfMiddleware store)
