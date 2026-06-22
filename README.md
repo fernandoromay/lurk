@@ -9,7 +9,7 @@ Lurk compiles your entire application—including HTML templates and multi-langu
 ## Features
 
 - **`[lurk|...|]` Quasiquoter** — HTML templates with compile-time variable checking. Typos are build errors, not runtime blanks.
-- **Type-safe i18n** — Missing translations are compile errors. Routes are generated for all languages in one call.
+- **Type-safe i18n** — Missing translations are compile errors. Routes are generated for all languages in one call. Implicit `?lang` parameter eliminates manual threading.
 - **Session + CSRF** — File-backed sessions with automatic CSRF validation on POST routes. Secure cookies in production, atomic file writes, session ID validation.
 - **`Lurk.Flash`** — One-time session-based messages for success/error feedback.
 - **`Lurk.Form`** — Composable anti-abuse pipeline: honeypot, timing, MX verification, field length. Guards run in `Action` for session access.
@@ -30,7 +30,7 @@ lib/lurk/
 │   ├── Html.hs           # Html type, renderHtml, ToHtml class
 │   ├── Flash.hs          # Flash messages (one-time session data)
 │   ├── Form.hs           # FormData, FormGuard, withForm, built-in guards
-│   ├── Routes.hs         # getPages, postActions, routeSettings, notFound
+│   ├── Routes.hs         # redirect, currentPath, trailingSlash
 │   ├── Request.hs        # Request helpers (params, headers, cookies)
 │   ├── Env.hs            # loadEnv, getEnv, requireEnv
 │   ├── Session.hs        # File-backed session store (TVar) with destroySession
@@ -40,7 +40,7 @@ lib/lurk/
 │   ├── Cookie.hs         # Cookie helpers
 │   ├── SEO.hs            # SEO data types (title, meta, OG, structured data)
 │   ├── Assets.hs         # mkAssetPath, fingerprinted asset URLs
-│   ├── Language.hs        # Language typeclass for i18n
+│   ├── Language.hs        # Language type, withLang, allLanguages, toText
 │   ├── Email/
 │   │   └── SMTP.hs       # Self-contained SMTP client (STARTTLS/SMTPS)
 │   ├── Deploy.hs         # DeployProvider typeclass
@@ -80,22 +80,21 @@ build-depends: lurk
 module Router where
 
 import Lurk.Prelude
-import Language (allLanguages)
 
 router :: LurkApp
 router = do
     routeSettings [ TrailingSlashes, ForceSSL, ServeStatic "public" ]
-    getPages allLanguages homePath homeAction
-    postActions allLanguages contactPath contactPostAction
+    get homePath homeAction
+    post contactPath contactPostAction
     notFound notFoundAction
 ```
 
 ### 3. Write views with `[lurk|...|]`
 
 ```haskell
-homeView :: Language -> Html
-homeView lang = [lurk|
-  <html>
+homeView :: ViewCtx Language => Locale -> Html
+homeView locale = defaultLayout seo [lurk|
+  <html lang="{{toText ?lang}}">
   <body>
     <h1>{{heroTitle}}</h1>
     <a href="{{ctaLink}}">{{ctaText}}</a>
@@ -103,11 +102,11 @@ homeView lang = [lurk|
   </html>
 |]
   where
-    heroTitle = case lang of
+    heroTitle = case ?lang of
       EN -> "Hello World"
       ES -> "Hola Mundo"
-    ctaText = "Get Started"
-    ctaLink = "/access/"
+    ctaText = locale.ctaText
+    ctaLink = locale.ctaLink
 ```
 
 Variables are checked at compile time. A typo like `{{heroTitel}}` fails the build.
@@ -115,23 +114,22 @@ Variables are checked at compile time. A typo like `{{heroTitel}}` fails the bui
 ### 4. Handle forms
 
 ```haskell
-contactPostAction :: Language -> Action ()
-contactPostAction lang = do
-    withForm
-        [ guardHoneypot "b_website" "/404/"
-        , guardMinSubmitTime 3 "/404/"
-        , guardMxRecord "email" "/404/"
-        , guardMaxLength "name" 200 "/404/"
+contactPostAction :: (?lang :: Language) => Action ()
+contactPostAction = do
+    fd <- validateForm
+        [ honeypot "b_website" (redirect "/404/")
+        , minSubmitTime 3 (redirect "/404/")
+        , mxRecord "email" (redirect "/404/")
+        , maxLength "name" 200 (redirect "/404/")
         ]
-        (\_ -> redirect "/404/")   -- error handler
-        $ \fd -> do                 -- validated form data
-            let name  = getParamDef "name" "" fd
-                email = getParamDef "email" "" fd
-            -- Process form...
-            redirect "/thanks/"
+
+    let name  = getParamDef "name" "" fd
+        email = getParamDef "email" "" fd
+    -- Process form...
+    redirect "/thanks/"
 ```
 
-Guards run in sequence. First failure triggers the error handler. `FormData` wraps the parsed params with typed extraction helpers.
+Guards run in sequence. First failure triggers the fallback action and short-circuits. `validateForm` returns validated `FormData` on success.
 
 ### 5. Load environment config
 
@@ -155,13 +153,71 @@ Re-exports everything needed for a typical web app:
 import Lurk.Prelude  -- Html, Action, Text, getEnv, render, redirect, etc.
 ```
 
-### `getPages` / `postActions`
+### `get` / `post`
 
-Register routes for all languages:
+Register routes for all languages. The action receives `?lang` implicitly:
 
 ```haskell
-getPages :: [Language] -> (Language -> Text) -> (Language -> Action ()) -> LurkApp
-postActions :: [Language] -> (Language -> Text) -> (Language -> Action ()) -> LurkApp
+get :: (Enum lang, Bounded lang)
+    => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
+post :: (Enum lang, Bounded lang)
+     => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
+```
+
+`getPages`/`postActions` remain available for edge cases (explicit language lists):
+
+```haskell
+getPages :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
+postActions :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
+```
+
+### Implicit Language (`?lang`)
+
+Lurk uses Haskell's `ImplicitParams` to thread language through your app without explicit parameters. Define your language type with `Enum` and `Bounded`:
+
+```haskell
+data Language = EN | ES | KO
+    deriving (Eq, Enum, Bounded)
+```
+
+`get`/`post` bind `?lang` automatically. Controllers and views access it implicitly:
+
+```haskell
+-- Controller: ?lang comes from the router
+homeAction :: (?lang :: Language) => Action ()
+homeAction = render $ homeView (getLocale ?lang)
+
+-- View: uses ViewCtx for the full implicit context
+homeView :: ViewCtx Language => Locale -> Html
+homeView locale = defaultLayout seo [lurk|
+  <html lang="{{toText ?lang}}">
+    {{navbar}}
+    ...
+  </html>
+|]
+
+-- Partial: no explicit lang parameter
+navbar :: ViewCtx Language => Html
+navbar = [lurk|...{{navbarLocale ?lang}}...|]
+```
+
+`ViewCtx` expands to:
+
+```haskell
+type ViewCtx lang = (?currentPath :: Text, ?params :: [(Text, Text)], ?lang :: lang)
+```
+
+The `lang` type variable is polymorphic — use your own language type. Single-language projects work unchanged: `data Language = EN deriving (Eq, Enum, Bounded)`.
+
+### Flow
+
+```
+Router:  get homePath homeAction
+           └─ binds ?lang for each language (EN, ES, KO)
+Controller: homeAction  (?lang :: Language => Action ())
+           └─ passes ?lang to view via implicit scope
+View:    homeView  (?currentPath, ?params, ?lang => Html)
+           └─ renders with ?lang in scope
 ```
 
 ### `[lurk|...|]` Quasiquoter
@@ -305,21 +361,22 @@ renderFlashMaybe :: Action Html  -- renders or empty
 Composable form processing with built-in security guards:
 
 ```haskell
+-- Run guards and return validated data
+validateForm :: [FormGuard] -> Action FormData
+
 -- Extraction helpers
 getParam       :: Text -> FormData -> Maybe Text
 getParamDef    :: Text -> Text -> FormData -> Text
-requireParam   :: Text -> Text -> FormData -> Action Text
 parseParam     :: Read a => Text -> FormData -> Maybe a
 
--- Pipeline runner
-withForm :: [FormGuard] -> (Text -> Action ()) -> (FormData -> Action ()) -> Action ()
-withFormDefault :: [FormGuard] -> (FormData -> Action ()) -> Action ()
+-- Built-in guards (fallback runs on failure, e.g. redirect)
+honeypot       :: Text -> Action () -> FormGuard       -- hidden field must be empty
+minSubmitTime  :: Int -> Action () -> FormGuard        -- session-backed timing check
+mxRecord       :: Text -> Action () -> FormGuard       -- DNS MX verification
+maxLength      :: Text -> Int -> Action () -> FormGuard -- field length limit
 
--- Built-in guards
-guardHoneypot      :: Text -> Text -> FormGuard       -- hidden field must be empty
-guardMinSubmitTime :: Int -> Text -> FormGuard          -- session-backed timing check
-guardMxRecord      :: Text -> Text -> FormGuard        -- DNS MX verification
-guardMaxLength     :: Text -> Int -> Text -> FormGuard  -- field length limit
+-- Session helper
+setFormLoadTime :: Action ()  -- call when rendering form for minSubmitTime
 ```
 
 ### `Lurk.Email.SMTP`
