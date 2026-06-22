@@ -114,6 +114,61 @@ CalVer versioning, pre-configured warnings/extensions, single executable.
 Type-safe route ADT (`data Page = Home | Pricing | ...`) with compile-time
 exhaustiveness checking and auto-generated localized path helpers.
 
+### Path Parameters (CMS Phase)
+
+Dynamic URL segments for content-driven pages:
+
+```haskell
+-- Register a route with a path parameter
+getPagesWith allLanguages (pagePath Blog <> "/:slug") blogPostAction
+
+-- Extract typed parameters in handlers
+slug <- param "slug"  -- Scotty already provides this
+
+-- Future: typed parameter extraction
+data BlogRoute = BlogRoute { slug :: Text }
+blogRoute :: RouteParam BlogRoute
+```
+
+Needed for: blog posts, product variants, user profiles, any CMS-like content.
+Build on top of Scotty's existing `param` function.
+
+### Per-Route Middleware (Auth Phase)
+
+Apply middleware to specific routes instead of globally:
+
+```haskell
+-- Current: all middleware is global via routeSettings
+routeSettings [ TrailingSlashes, ForceSSL, ServeStatic "public" ]
+
+-- Future: per-route middleware
+getPages allPages homePath homeAction
+getPagesWith [authRequired] allPages adminPath adminAction
+getPagesWith [rateLimited 100] allPages apiPath apiAction
+```
+
+Needed for: admin dashboards, API endpoints, any protected content.
+Could also support route groups: `routeGroup [authRequired] $ do ...`
+
+### HTTP Method Actions Beyond GET/POST (REST Phase)
+
+RESTful route registration for API endpoints:
+
+```haskell
+routePut :: (Enum lang, Bounded lang) => (lang -> Text) -> (lang -> Action ()) -> LurkApp
+routeDelete :: (Enum lang, Bounded lang) => (lang -> Text) -> (lang -> Action ()) -> LurkApp
+routePatch :: (Enum lang, Bounded lang) => (lang -> Text) -> (lang -> Action ()) -> LurkApp
+
+-- Or a unified RESTful route:
+restful :: (Enum lang, Bounded lang) => (lang -> Text) -> RestActions lang -> LurkApp
+restful pathFn actions = do
+    route pathFn (getList actions)
+    routePost pathFn (postCreate actions)
+    route (pathFn <> "/:id") (getOne actions)
+    routePut (pathFn <> "/:id") (putUpdate actions)
+    routeDelete (pathFn <> "/:id") (deleteOne actions)
+```
+
 ---
 
 ## Very Hard (quarters)
