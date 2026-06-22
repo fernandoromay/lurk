@@ -89,6 +89,30 @@ Detect at edit time via Language Server or VS Code diagnostics API:
 - `{{ }}` with empty content
 - Nested `[lurk|` without matching close
 
+### Language Detection & Fallback
+
+For routes with a single path (e.g., 404 pages), detect language via:
+1. **Cookie/session** — Highest priority. User's saved preference persists across visits.
+2. **Browser `Accept-Language` header** — Parse and match against available languages.
+3. **Default fallback** — EN (first language in enum order).
+
+```haskell
+detectLanguage :: (Enum lang, Bounded lang) => [lang] -> Action lang
+detectLanguage available = do
+    -- 1. Check cookie/session for saved preference
+    saved <- getCookie "lang_preference"
+    case saved >>= parseLang of
+        Just lang | lang `elem` available -> pure lang
+        _ -> do
+            -- 2. Parse Accept-Language header
+            acceptLang <- lookupHeader "Accept-Language"
+            let browserLang = parseAcceptLanguage acceptLang >>= matchLang available
+            -- 3. Fallback to default
+            pure $ fromMaybe (head available) browserLang
+```
+
+Use case: `notFoundAction` can render in the user's language without requiring a language-specific path.
+
 ---
 
 ## Hard (months)
@@ -132,6 +156,42 @@ blogRoute :: RouteParam BlogRoute
 
 Needed for: blog posts, product variants, user profiles, any CMS-like content.
 Build on top of Scotty's existing `param` function.
+
+### Unified HTTP Method Wrappers
+
+Consolidate singular/plural route registration into single functions per HTTP method:
+
+```haskell
+-- Current: 4 functions (getPage, getPages, postAction, postActions)
+-- Proposed: 2 functions (get, post) + escape hatches
+
+get :: (Enum lang, Bounded lang)
+    => (lang -> Text) -> (lang -> Action ()) -> LurkApp
+get pathFn actionFn = getPages allLanguages pathFn actionFn
+
+post :: (Enum lang, Bounded lang)
+     => (lang -> Text) -> (lang -> Action ()) -> LurkApp
+post pathFn actionFn = postActions allLanguages pathFn actionFn
+
+-- Future: add delete, put, patch for REST APIs
+delete :: (Enum lang, Bounded lang)
+       => (lang -> Text) -> (lang -> Action ()) -> LurkApp
+put :: (Enum lang, Bounded lang)
+    => (lang -> Text) -> (lang -> Action ()) -> LurkApp
+patch :: (Enum lang, Bounded lang)
+      => (lang -> Text) -> (lang -> Action ()) -> LurkApp
+
+-- Keep getPages/postActions for edge cases (subset of languages)
+```
+
+Router becomes:
+```haskell
+router = do
+    routeSettings [ TrailingSlashes, ForceSSL, ServeStatic "public" ]
+    get homePath (withLang homeAction)
+    post accessPath (withLang accessPostAction)
+    notFound notFoundAction
+```
 
 ### Per-Route Middleware (Auth Phase)
 
@@ -324,3 +384,30 @@ To test the full suite of Lurk providers without infrastructure costs:
 3. **Unused dependencies** — `lurk.cabal` library section lists `mtl`, `syb`, `network`, `cookie` but no module imports them.
 
 4. **Empty `CHANGELOG.md`** — Should be populated or removed.
+
+## Optional | Lowest Priority
+
+### Locale modules — For pointfree views
+
+Currently, locale functions are explicit (`getLocale :: Language -> SomeLocale`). Views call them as `Home.getLocale ?lang`. This works but prevents pointfree style in views.
+
+To enable `homeView (Home.getLocale)` in pointfree style, locale functions need `?lang`:
+
+```haskell
+-- Before:
+getLocale :: Language -> HomeLocale
+getLocale EN = HomeLocale {..}
+getLocale ES = HomeLocale {..}
+getLocale KO = HomeLocale {..}
+
+-- After:
+getLocale :: (?lang :: Language) => HomeLocale
+getLocale = case ?lang of
+    EN -> HomeLocale {..}
+    ES -> HomeLocale {..}
+    KO -> HomeLocale {..}
+```
+
+**Tradeoff:** This changes 33 locale functions. The benefit is purely aesthetic (pointfree style). The locale layer becomes coupled to the implicit params mechanism.
+
+**Recommendation:** Skip this phase. Keep locale explicit. The 1 `?lang` mention per controller body (`Home.getLocale ?lang`) is acceptable.
