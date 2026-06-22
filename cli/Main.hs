@@ -291,14 +291,14 @@ runProject = do
     loadDotEnv
     updateCabalModules
     putStrLn "Starting LURK dev server..."
-    callProcess "cabal" ["run", "--ghc-options=-v0"]
+    callProcess "cabal" ["run", "-v0"]
 
 buildProject :: IO ()
 buildProject = do
     loadDotEnv
     updateCabalModules
     putStrLn "Building project..."
-    callProcess "cabal" ["build", "--ghc-options=-v0"]
+    callProcess "cabal" ["build", "-v0"]
 
 -- | Load .env file if it exists, setting env vars only if not already set
 loadDotEnv :: IO ()
