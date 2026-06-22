@@ -2,14 +2,14 @@
 {-# LANGUAGE QuasiQuotes #-}
 module Lurk.SEO
     ( SEO(..)
-    , Alternate(..)
     , defaultSEO
     , renderSEO
+    , renderAlternates
     ) where
 
 import Data.Text (Text)
-import Lurk.Html (Html, concatHtml)
-import Lurk.QQ (lurk)
+import Lurk.Html
+import Lurk.QQ
 
 data SEO = SEO
     { title           :: Text
@@ -17,17 +17,11 @@ data SEO = SEO
     , metaDescription :: Text
     , robots          :: Maybe Text
     , canonical       :: Maybe Text
-    , alternates      :: [Alternate]
     , ogTitle         :: Maybe Text
     , ogDescription   :: Maybe Text
     , ogType          :: Maybe Text
     , ogImage         :: Maybe Text
     , customTags      :: Html
-    }
-
-data Alternate = Alternate
-    { hreflang :: Text
-    , href     :: Text
     }
 
 defaultSEO :: SEO
@@ -39,7 +33,6 @@ defaultSEO = SEO
     -- Optional fields
     , robots = Nothing
     , canonical = Nothing
-    , alternates = []
     , ogTitle = Nothing
     , ogDescription = Nothing
     , ogType = Nothing
@@ -52,33 +45,37 @@ renderSEO seo = [lurk|
     <title>{{title seo}}</title>
     <meta name="title" content="{{metaTitle seo}}">
     <meta name="description" content="{{metaDescription seo}}">
-    {{renderRobots (robots seo)}}
-    {{renderCanonical (canonical seo)}}
-    {{renderAlternates (alternates seo)}}
-    {{renderOgTitle (ogTitle seo)}}
-    {{renderOgDescription (ogDescription seo)}}
-    {{renderOgType (ogType seo)}}
-    {{renderOgImage (ogImage seo)}}
+    {{
+      case (robots seo) of
+        Just r -> (lurk|<meta name="robots" content="{{r}}">|)
+        _      -> mempty
+    }}
+    {{case (canonical seo) of
+        Just c -> (lurk|<link rel="canonical" href="{{c}}">|)
+        _      -> mempty
+    }}
+    {{case (ogTitle seo) of
+        Just t -> (lurk|<meta property="og:title" content="{{t}}">|)
+        _      -> mempty
+    }}
+    {{case (ogDescription seo) of
+        Just d -> (lurk|<meta property="og:description" content="{{d}}">|)
+        _      -> mempty
+    }}
+    {{case (ogType seo) of
+        Just t -> (lurk|<meta property="og:type" content="{{t}}">|)
+        _      -> mempty
+    }}
+    {{case (ogImage seo) of
+        Just i -> (lurk|<meta property="og:image" content="{{i}}">|)
+        _      -> mempty
+    }}
     {{customTags seo}}
 |]
-  where
-    renderRobots (Just r) = [lurk|<meta name="robots" content="{{r}}">|]
-    renderRobots Nothing  = mempty
 
-    renderCanonical (Just c) = [lurk|<link rel="canonical" href="{{c}}">|]
-    renderCanonical Nothing  = mempty
-
-    renderAlternates = concatHtml . map (\a ->
-        [lurk|<link rel="alternate" hreflang="{{hreflang a}}" href="{{href a}}">|])
-
-    renderOgTitle (Just t) = [lurk|<meta property="og:title" content="{{t}}">|]
-    renderOgTitle Nothing  = mempty
-
-    renderOgDescription (Just d) = [lurk|<meta property="og:description" content="{{d}}">|]
-    renderOgDescription Nothing  = mempty
-
-    renderOgType (Just t) = [lurk|<meta property="og:type" content="{{t}}">|]
-    renderOgType Nothing  = mempty
-
-    renderOgImage (Just i) = [lurk|<meta property="og:image" content="{{i}}">|]
-    renderOgImage Nothing  = mempty
+renderAlternates :: Text -> [(Text, Text)] -> Html
+renderAlternates _ [] = mempty
+renderAlternates _ [_] = mempty
+renderAlternates domain paths@((_, defPath):_) = concatHtml $
+    [lurk|<link rel="alternate" hreflang="x-default" href="{{domain <> defPath}}">|] :
+    [ concatHtml ["\n    ", [lurk|<link rel="alternate" hreflang="{{lang}}" href="{{domain <> path}}">|]] | (lang, path) <- paths ]
