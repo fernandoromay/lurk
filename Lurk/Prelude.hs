@@ -36,6 +36,8 @@ module Lurk.Prelude
     , LurkApp
     , runLurk
     , routeSettings
+    , get
+    , post
     , getPage
     , getPages
     , postAction
@@ -43,6 +45,9 @@ module Lurk.Prelude
     , RouteOption (..)
     , getStore
     , getAppEnv
+    -- Language
+    , withLang
+    , ViewCtx
     -- Env
     , Env
     , getEnv
@@ -103,18 +108,25 @@ import Lurk.CSRF (CsrfToken, newCsrfToken, getCsrfToken, validateCsrfToken, getS
 import Lurk.Flash (FlashLevel(..), Flash(..), setFlash, getFlash, flashSuccess, flashError, flashWarning, renderFlash, renderFlashMaybe)
 import Lurk.Env (Env, loadEnv, loadEnvFile, getEnv, getEnvInt, getEnvBool, getEnvWithDefault, requireEnv, hasEnv)
 import Lurk.SEO
-import Lurk.App (LurkApp, Action, getPage, getPages, postAction, postActions, routeSettings, runLurk, RouteOption(..), getStore, getAppEnv)
+import Lurk.App (LurkApp, Action, get, post, getPage, getPages, postAction, postActions, routeSettings, runLurk, RouteOption(..), getStore, getAppEnv)
+import Lurk.Language (withLang)
 import Web.Scotty (html, queryParam)
 import Web.Scotty qualified as Scotty
 import Network.HTTP.Types qualified as Http
 import Prelude
+
+-- | View context: implicit parameters available in views and partials.
+-- The @lang@ type variable allows projects to use their own language type.
+type ViewCtx lang = (?currentPath :: Text, ?params :: [(Text, Text)], ?lang :: lang)
 
 -- | Look up a value in the request context by key
 contextValue :: (?params :: [(Text, Text)]) => Text -> Maybe Text
 contextValue key = lookup key ?params
 
 -- | Renders LURK Html into a Scotty response
--- Provides @?currentPath@ and @?params@ as implicit parameters
+-- Provides @?currentPath@ and @?params@ as implicit parameters.
+-- @?lang@ comes from the calling controller's scope (via 'withLang'),
+-- not from this function — it flows directly to views.
 render :: ((?currentPath :: Text, ?params :: [(Text, Text)]) => Html) -> [(Text, Text)] -> Action ()
 render viewHtml ctx = do
     uri <- currentPath
