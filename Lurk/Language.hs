@@ -2,6 +2,7 @@ module Lurk.Language
     ( allLanguages
     , fromText
     , toText
+    , withLang
     , Text
     , Data
     , langPaths
@@ -34,3 +35,12 @@ langPaths = go
     go (fn : rest)
         | any (\lang -> fn lang == ?currentPath) langs = [(toText lang, fn lang) | lang <- langs]
         | otherwise = go rest
+
+-- | Bind a language value to the implicit @?lang@ parameter.
+-- Use in the router to provide @?lang@ to action handlers.
+--
+-- @
+-- get homePath (withLang homeAction)
+-- @
+withLang :: lang -> ( (?lang :: lang) => action ) -> action
+withLang lang action = let ?lang = lang in action
