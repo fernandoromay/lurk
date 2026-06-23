@@ -2,7 +2,7 @@ cabal-version:   3.6
 
 -- You can comment what you are not using in this section
 
-name:            project -- Make sure to change this
+name:            project
 version:         2026.1.1 -- Use a CalVer for simpler versioning
 synopsis:        -- Short (one-line) description
 description:     -- Long description
@@ -40,7 +40,7 @@ common extensions
 
 -- ------------------------------------------------------------
 
-executable project --Make sure to change this (commonly your project's name)
+executable project
     import:          warnings, extensions
     main-is:         Main.hs
     hs-source-dirs:  .

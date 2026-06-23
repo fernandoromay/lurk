@@ -550,9 +550,9 @@ capitalize :: String -> String
 capitalize "" = ""
 capitalize s = toUpper (head s) : tail s
 
--- | Normalize project name: lowercase, spaces to hyphens
+-- | Normalize project name: lowercase, spaces to hyphens, trim trailing hyphens
 normalizeName :: String -> String
-normalizeName = map (\c -> if c == ' ' then '-' else toLower c) . filter (\c -> isAlpha c || c == ' ')
+normalizeName = reverse . dropWhile (== '-') . reverse . map toLower . map (\c -> if c == ' ' then '-' else c) . filter (\c -> isAlpha c || c == ' ' || c == '-')
 
 -- | Prompt user to choose from numbered options
 promptChoice :: String -> [(String, String)] -> IO String
