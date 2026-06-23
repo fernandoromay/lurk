@@ -10,28 +10,41 @@ Ship `error404View` and `error500View` in a `Lurk.Views` module. Hardcoded
 English strings. Projects that want custom branding override by defining
 their own.
 
+### Binary Stripping
+
+Add `strip` step to reduce binary size from ~55MB to ~20MB.
+
+### `langPaths` decomposition
+
+Current `langPaths` in `Lurk.Language` combines two concerns: enumerating all languages for a path function, and reverse lookup (finding which page matches `?currentPath`).
+
+**Proposed:** Separate into two primitives.
+
+```haskell
+-- Lurk.Routes: enumerate all languages for one path function
+langPathsFor :: (Enum lang, Bounded lang)
+             => (lang -> Text) -> [(Text, Text)]
+langPathsFor pathFn = [(toText lang, pathFn lang) | lang <- allLanguages]
+
+-- Project (Paths.hs): reverse lookup — find which page matches current path
+pageTitle :: Language -> Text -> Maybe (Language -> Text)
+```
+
+**Benefits:** Separates concerns, makes `pageAlts` computation explicit, removes subtle fallback behavior. `langPathsFor` is useful on its own (sitemaps, alternate generation).
+
+**Trade-off:** Introduces `pageTitle` in the project that must stay in sync with routes. Current `langPaths` is self-contained but harder to reason about.
+
+### Cleanup: Unused dependencies
+
+`lurk.cabal` library section lists `mtl`, `syb`, `network`, `cookie` but no module imports them.
+
+### Cleanup: Empty CHANGELOG.md (**Not Necessary**)
+
+Will be used once we get to a stable MVP point.
+
 ---
 
 ## Medium (weeks)
-
-### `Lurk.Email` — HTTP-Based Providers (Future)
-
-Extend the email namespace with API-based providers:
-
-```haskell
-data MailConfig
-    = SMTPConfig { ... }       -- done (Lurk.Email.SMTP)
-    | MailgunConfig { apiKey :: Text, domain :: Text }
-    | SendgridConfig { apiKey :: Text }
-    | ResendConfig { apiKey :: Text }
-
-sendMail :: MailConfig -> MailMessage -> IO (Either MailError ())
-```
-
-### `Lurk.Email.Inbound` — Inbound Email (Future)
-
-Receive emails via webhooks (Mailgun/SendGrid POST) or IMAP polling.
-Modern web apps use webhooks, not long-lived IMAP connections.
 
 ### `Lurk.Opaque` — Bot-Proof Content
 
@@ -68,30 +81,9 @@ cfBotVerified :: Action (Maybe Bool)
 turnstileVerify :: Text -> IO Bool  -- CAPTCHA replacement
 ```
 
-### `Lurk.Auth` — Session-Based Authentication
-
-Extend existing session system:
-
-```haskell
-login        :: SessionStore -> User -> Action ()
-logout       :: SessionStore -> Action ()
-currentUser  :: SessionStore -> Action (Maybe User)
-requireAuth  :: SessionStore -> Action User
-requireRole  :: SessionStore -> Role -> Action User
-```
-
-### VS Code Error Diagnostics for Lurk Blocks
-
-Detect at edit time via Language Server or VS Code diagnostics API:
-- Unclosed `{{` or `}}`
-- Unclosed `[lurk|` or `(lurk|`
-- Missing `|]` or `|)` terminators
-- `{{ }}` with empty content
-- Nested `[lurk|` without matching close
-
 ### Language Detection & Fallback
 
-For routes with a single path (e.g., 404 pages), detect language via:
+Detect language via:
 1. **Cookie/session** — Highest priority. User's saved preference persists across visits.
 2. **Browser `Accept-Language` header** — Parse and match against available languages.
 3. **Default fallback** — EN (first language in enum order).
@@ -111,11 +103,60 @@ detectLanguage available = do
             pure $ fromMaybe (head available) browserLang
 ```
 
-Use case: `notFoundAction` can render in the user's language without requiring a language-specific path.
+Use case: `notFoundAction` can render in the user's language without requiring a language-specific path. `HomePage` can redirect to the most used language if no cookie exists.
+
+### VS Code Error Diagnostics for Lurk Blocks
+
+Detect at edit time via Language Server or VS Code diagnostics API:
+- Unclosed `{{` or `}}`
+- Unclosed `[lurk|` or `(lurk|`
+- Missing `|]` or `|)` terminators
+- `{{ }}` with empty content
+- Nested `[lurk|` without matching close
+
+### `.cabal` Scaffolding
+
+`lurk init` or `lurk new ProjectName` generates a clean template with
+CalVer versioning, pre-configured warnings/extensions, single executable.
+
+### Remote Build Support
+
+Optional remote builds on VPS for projects where VPS RAM > 4GB.
 
 ---
 
 ## Hard (months)
+
+### `Lurk.Email` — HTTP-Based Providers (Future)
+
+Extend the email namespace with API-based providers:
+
+```haskell
+data MailConfig
+    = SMTPConfig { ... }       -- done (Lurk.Email.SMTP)
+    | MailgunConfig { apiKey :: Text, domain :: Text }
+    | SendgridConfig { apiKey :: Text }
+    | ResendConfig { apiKey :: Text }
+
+sendMail :: MailConfig -> MailMessage -> IO (Either MailError ())
+```
+
+### `Lurk.Email.Inbound` — Inbound Email (Future)
+
+Receive emails via webhooks (Mailgun/SendGrid POST) or IMAP polling.
+Modern web apps use webhooks, not long-lived IMAP connections.
+
+### `Lurk.Auth` — Session-Based Authentication
+
+Extend existing session system:
+
+```haskell
+login        :: SessionStore -> User -> Action ()
+logout       :: SessionStore -> Action ()
+currentUser  :: SessionStore -> Action (Maybe User)
+requireAuth  :: SessionStore -> Action User
+requireRole  :: SessionStore -> Role -> Action User
+```
 
 ### `lurk create page` — CLI Scaffolding
 
@@ -128,15 +169,12 @@ Generates `View/ViewName.hs`, `Locales/ViewName.hs`, creates or updates
 
 Also: `lurk create view`, `lurk create controller`, `lurk create locale`.
 
-### `.cabal` Scaffolding
-
-`lurk init` or `lurk new ProjectName` generates a clean template with
-CalVer versioning, pre-configured warnings/extensions, single executable.
-
 ### Page / Route ADT
 
 Type-safe route ADT (`data Page = Home | Pricing | ...`) with compile-time
 exhaustiveness checking and auto-generated localized path helpers.
+
+> Differed due to incompatibility with Lurk's philosophy of previous propositions.
 
 ### Path Parameters (CMS Phase)
 
@@ -157,40 +195,17 @@ blogRoute :: RouteParam BlogRoute
 Needed for: blog posts, product variants, user profiles, any CMS-like content.
 Build on top of Scotty's existing `param` function.
 
-### Unified HTTP Method Wrappers
+### Unified HTTP Method Wrappers — REST Methods
 
-Consolidate singular/plural route registration into single functions per HTTP method:
+Add `delete`, `put`, `patch` for REST APIs (consolidate with existing `get`/`post`):
 
 ```haskell
--- Current: 4 functions (getPage, getPages, postAction, postActions)
--- Proposed: 2 functions (get, post) + escape hatches
-
-get :: (Enum lang, Bounded lang)
-    => (lang -> Text) -> (lang -> Action ()) -> LurkApp
-get pathFn actionFn = getPages allLanguages pathFn actionFn
-
-post :: (Enum lang, Bounded lang)
-     => (lang -> Text) -> (lang -> Action ()) -> LurkApp
-post pathFn actionFn = postActions allLanguages pathFn actionFn
-
--- Future: add delete, put, patch for REST APIs
 delete :: (Enum lang, Bounded lang)
        => (lang -> Text) -> (lang -> Action ()) -> LurkApp
 put :: (Enum lang, Bounded lang)
     => (lang -> Text) -> (lang -> Action ()) -> LurkApp
 patch :: (Enum lang, Bounded lang)
       => (lang -> Text) -> (lang -> Action ()) -> LurkApp
-
--- Keep getPages/postActions for edge cases (subset of languages)
-```
-
-Router becomes:
-```haskell
-router = do
-    routeSettings [ TrailingSlashes, ForceSSL, ServeStatic "public" ]
-    get homePath (withLang homeAction)
-    post accessPath (withLang accessPostAction)
-    notFound notFoundAction
 ```
 
 ### Per-Route Middleware (Auth Phase)
@@ -209,44 +224,6 @@ getPagesWith [rateLimited 100] allPages apiPath apiAction
 
 Needed for: admin dashboards, API endpoints, any protected content.
 Could also support route groups: `routeGroup [authRequired] $ do ...`
-
-### HTTP Method Actions Beyond GET/POST (REST Phase)
-
-RESTful route registration for API endpoints:
-
-```haskell
-routePut :: (Enum lang, Bounded lang) => (lang -> Text) -> (lang -> Action ()) -> LurkApp
-routeDelete :: (Enum lang, Bounded lang) => (lang -> Text) -> (lang -> Action ()) -> LurkApp
-routePatch :: (Enum lang, Bounded lang) => (lang -> Text) -> (lang -> Action ()) -> LurkApp
-
--- Or a unified RESTful route:
-restful :: (Enum lang, Bounded lang) => (lang -> Text) -> RestActions lang -> LurkApp
-restful pathFn actions = do
-    route pathFn (getList actions)
-    routePost pathFn (postCreate actions)
-    route (pathFn <> "/:id") (getOne actions)
-    routePut (pathFn <> "/:id") (putUpdate actions)
-    routeDelete (pathFn <> "/:id") (deleteOne actions)
-```
-
----
-
-## Very Hard (quarters)
-
-### `Lurk.DB` — Type-Safe Database Layer
-
-The Haskell type IS the schema. No ORM:
-
-```haskell
-data User = User
-    { userId    :: Int
-    , userName  :: Text
-    , userEmail :: Text
-    } deriving (Generic, DBSchema)
-
-findUser :: Connection -> Int -> IO (Maybe User)
-createUser :: Connection -> NewUser -> IO User
-```
 
 ### `Lurk.i18n` — Enhanced Internationalization
 
@@ -305,6 +282,154 @@ cacheDelete :: CacheStore -> Text -> IO ()
 cacheOr     :: CacheStore -> Text -> Int -> IO a -> IO a
 ```
 
+### Subdomain Routing
+
+Route different subdomains or domains to independent sub-routers within a single project.
+
+**URL structures** (how language appears in URL — SEO concern):
+- Path-based: `/es/`, `/ko/` (preferred — no authority split)
+- Subdomain: `es.domain.com` (splits authority)
+- Domain/ccTLD: `domain.es`, `domain.ko` (splits authority)
+
+**Note:** Subdomains and separate domains split domain authority, which is bad for SEO. Path-based is preferred for SEO-first projects. However, some use cases (multi-brand, regional sites) may require subdomains or separate domains.
+
+**Language detection signals** (fallback when no URL signal — e.g., 404 pages, social networks):
+- Cookie/Session: User's saved preference
+- Accept-Language header: Browser's language preference
+- IP/Geo: Language based on user's location
+- User profile: Logged-in user's saved preference
+
+Structure:
+
+```
+├── Router.hs          # Main site (www/domain.com)
+├── Blog/
+│   ├── Router.hs      # blog.domain.com
+│   ├── Controller.hs
+│   └── View.hs
+├── Admin/
+│   ├── Router.hs      # admin.domain.com
+│   ├── Controller.hs
+│   └── View.hs
+└── Cms/
+    ├── Router.hs      # cms.domain.com
+    ├── Controller.hs
+    └── View.hs
+```
+
+New `Lurk.Domain` middleware inspects `Host` header, sets `?subdomain`:
+
+```haskell
+-- Lurk.Domain
+domainRouter :: (Text -> LurkApp) -> LurkApp
+domainRouter dispatch = do
+    -- Middleware checks Host header, dispatches to sub-router
+    ...
+```
+
+Main router dispatches based on subdomain:
+
+```haskell
+router :: LurkApp
+router = do
+    routeSettings [TrailingSlashes, ForceSSL, ServeStatic "public"]
+    
+    domainRouter $ \case
+        "blog"  -> blogRouter
+        "admin" -> adminRouter
+        "cms"   -> cmsRouter
+        _       -> siteRouter
+
+siteRouter :: LurkApp
+siteRouter = do
+    get homePath homeAction
+    get pricingPath pricingAction
+    ...
+
+blogRouter :: LurkApp
+blogRouter = do
+    get "/" blogHomeAction
+    get "/:slug" postAction
+    ...
+```
+
+Each sub-router is a standalone `LurkApp` — no coupling between them. They can use different locales, different middleware, different sessions.
+
+**Language per subdomain:** Each sub-router defines its own `?lang` scope independently:
+
+```haskell
+siteRouter :: LurkApp
+siteRouter = do
+    get homePath homeAction    -- ?lang = EN | ES | KO (path-based)
+
+blogRouter :: LurkApp
+blogRouter = do
+    -- Language from subdomain, not path
+    domainGet "es" "/" blogHomeActionES
+    domainGet "en" "/" blogHomeActionEN
+
+adminRouter :: LurkApp
+adminRouter = do
+    get "/" adminHomeAction  -- ?lang fixed to EN (or user preference)
+```
+
+Different language types (`Language` vs `BlogLanguage` vs fixed `EN`), different path functions, different resolution strategies — all independent.
+
+**Alternative: Shared content across languages** — When all subdomains serve the same content in different languages, use `Router/` with one file per language:
+
+```
+├── Router.hs          # Dispatches based on domain/subdomain
+├── Router/
+│   ├── EN.hs          # English routes
+│   ├── ES.hs          # Spanish routes
+│   └── KO.hs          # Korean routes
+```
+
+```haskell
+-- Router.hs
+router :: LurkApp
+router = do
+    domainRouter $ \case
+        "es"    -> ES.router
+        "ko"    -> KO.router
+        _       -> EN.router
+
+-- Router/EN.hs
+router :: LurkApp
+router = do
+    get "/" homeActionEN
+    get "/pricing/" pricingActionEN
+    ...
+
+-- Router/ES.hs
+router :: LurkApp
+router = do
+    get "/" homeActionES
+    get "/precios/" pricingActionES
+    ...
+```
+
+Each language router is independent — different paths, different views, different locale files. The root router just dispatches.
+
+---
+
+## Very Hard (quarters)
+
+### `Lurk.DB` — Type-Safe Database Layer
+
+The Haskell type IS the schema. No ORM:
+
+```haskell
+data User = User
+    { userId    :: Int
+    , userName  :: Text
+    , userEmail :: Text
+    } deriving (Generic, DBSchema)
+
+findUser :: Connection -> Int -> IO (Maybe User)
+createUser :: Connection -> NewUser -> IO User
+```
+
 ### `Lurk.WASM` — Selective WASM Interactivity
 
 Only interactive "leaf" blocks compiled via GHC WASM backend.
@@ -317,11 +442,46 @@ admin dashboard. Surpass Laravel's Filament.
 
 ---
 
+## Optional
+
+### Locale modules — For pointfree views
+
+Currently, locale functions are explicit (`getLocale :: Language -> SomeLocale`). Views call them as `Home.getLocale ?lang`. This works but prevents pointfree style in views.
+
+To enable `homeView (Home.getLocale)` in pointfree style, locale functions need `?lang`:
+
+```haskell
+-- Before:
+getLocale :: Language -> HomeLocale
+getLocale EN = HomeLocale {..}
+getLocale ES = HomeLocale {..}
+getLocale KO = HomeLocale {..}
+
+-- After:
+getLocale :: (?lang :: Language) => HomeLocale
+getLocale = case ?lang of
+    EN -> HomeLocale {..}
+    ES -> HomeLocale {..}
+    KO -> HomeLocale {..}
+```
+
+**Tradeoff:** This changes 33 locale functions. The benefit is purely aesthetic (pointfree style). The locale layer becomes coupled to the implicit params mechanism.
+
+**Recommendation:** Skip this phase. Keep locale explicit. The 1 `?lang` mention per controller body (`Home.getLocale ?lang`) is acceptable.
+
+---
+
+## Issues Found
+
+### Critical
+
+1. **Missing `wai-middleware-force-ssl` in `lurk.cabal`** — `App.hs:27` imports `Network.Wai.Middleware.ForceSSL` but `lurk.cabal` does not list it in `build-depends`. Will fail on clean `cabal build`.
+
+2. **`?` replacement is global** — `QQ.hs:195` replaces ALL `?` characters with `__implicit_`, including inside string literals and comments. Should only replace `?` at identifier word boundaries.
+
+---
+
 ## Deployment & Performance
-
-### Binary Stripping
-
-Add `strip` step to reduce binary size from ~55MB to ~20MB.
 
 ### Remote Build Support
 
@@ -368,46 +528,3 @@ To test the full suite of Lurk providers without infrastructure costs:
 - **Google Cloud Run (Serverless)**: Test the Docker provider without managing a cluster (2M req/mo free).
 - **Play with K8s/Docker**: Fast, ephemeral labs for CI/CD pipeline validation.
 - **GitHub Packages (GHCR)**: Free OCI registry for testing Docker pushes in CI.
-
----
-
-## Issues Found
-
-### Critical
-
-1. **Missing `wai-middleware-force-ssl` in `lurk.cabal`** — `App.hs:27` imports `Network.Wai.Middleware.ForceSSL` but `lurk.cabal` does not list it in `build-depends`. Will fail on clean `cabal build`.
-
-2. **`?` replacement is global** — `QQ.hs:195` replaces ALL `?` characters with `__implicit_`, including inside string literals and comments. Should only replace `?` at identifier word boundaries.
-
-### Cleanup
-
-3. **Unused dependencies** — `lurk.cabal` library section lists `mtl`, `syb`, `network`, `cookie` but no module imports them.
-
-4. **Empty `CHANGELOG.md`** — Should be populated or removed.
-
-## Optional | Lowest Priority
-
-### Locale modules — For pointfree views
-
-Currently, locale functions are explicit (`getLocale :: Language -> SomeLocale`). Views call them as `Home.getLocale ?lang`. This works but prevents pointfree style in views.
-
-To enable `homeView (Home.getLocale)` in pointfree style, locale functions need `?lang`:
-
-```haskell
--- Before:
-getLocale :: Language -> HomeLocale
-getLocale EN = HomeLocale {..}
-getLocale ES = HomeLocale {..}
-getLocale KO = HomeLocale {..}
-
--- After:
-getLocale :: (?lang :: Language) => HomeLocale
-getLocale = case ?lang of
-    EN -> HomeLocale {..}
-    ES -> HomeLocale {..}
-    KO -> HomeLocale {..}
-```
-
-**Tradeoff:** This changes 33 locale functions. The benefit is purely aesthetic (pointfree style). The locale layer becomes coupled to the implicit params mechanism.
-
-**Recommendation:** Skip this phase. Keep locale explicit. The 1 `?lang` mention per controller body (`Home.getLocale ?lang`) is acceptable.
