@@ -12,6 +12,7 @@ import Data.List (isSuffixOf, sort, isInfixOf)
 import Data.Char (isAsciiUpper, isAlpha, isLower, toLower, toUpper)
 import System.Info (os)
 import Data.Maybe (fromMaybe, isNothing)
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Data.Map as Map
@@ -325,77 +326,123 @@ newProject scaffoldType = do
                             ]
 
                         targetDir <- case target of
-                            "." -> takeBaseName <$> getCurrentDirectory
-                            "" -> do
-                                putStrLn "Directory name (letters only, camelCase will be capitalized):"
-                                putStr "> "
-                                name <- getLine
-                                let cleaned = filter isAlpha name
-                                if null cleaned
-                                    then putStrLn "Error: Name must contain at least one letter." >> newProject scaffoldType
-                                    else pure cleaned
+                            "." -> pure "."
+                            "" -> promptCustomDir
                             custom -> pure custom
 
-                        let prefix = capitalize targetDir
+                        defaultName <- case targetDir of
+                            "." -> takeBaseName <$> getCurrentDirectory
+                            d -> pure d
+                        projectName <- promptProjectName (capitalize (filter isAlpha defaultName))
+
+                        let usePrefix = targetDir /= "."
+                            prefix = if usePrefix then
+                                        if target == "Web" then "Web"
+                                        else capitalize targetDir
+                                     else ""
+
+                        scaffold <- buildScaffold scaffoldsDir scaffoldType targetDir projectName prefix usePrefix
 
                         -- Check target is empty or doesn't exist
                         targetExists <- doesDirectoryExist targetDir
-                        if targetExists
-                            then do
-                                files <- listDirectory targetDir
-                                if null files
-                                    then scaffold
-                                    else putStrLn $ "Error: Directory '" ++ targetDir ++ "' is not empty."
-                            else scaffold
+                        if targetDir == "."
+                            then scaffold
+                            else if targetExists
+                                then do
+                                    files <- listDirectory targetDir
+                                    if null files
+                                        then scaffold
+                                        else putStrLn $ "Error: Directory '" ++ targetDir ++ "' is not empty."
+                                else scaffold
 
-                        scaffold = do
-                            let templateDir = scaffoldsDir </> scaffoldType
-                                rootFiles = ["cabal.project", "project.cabal", "Main.hs", "Router.hs"]
+buildScaffold :: FilePath -> String -> String -> String -> String -> Bool -> IO (IO ())
+buildScaffold scaffoldsDir scaffoldType targetDir projectName prefix usePrefix = do
+    let templateDir = scaffoldsDir </> scaffoldType
+        rootFiles = ["cabal.project", "project.cabal", "Main.hs", "Router.hs"]
 
-                            putStrLn $ "Creating " ++ prefix ++ " from " ++ scaffoldType ++ " scaffold..."
-                            putStrLn $ "Prefix: " ++ prefix ++ ".*"
+    -- Discover local modules from template
+    localModules <- discoverLocalModules templateDir
 
-                            -- Copy root files to ./
-                            mapM_ (\f -> do
-                                let src = templateDir </> f
-                                    dst = f
-                                exists' <- doesFileExist src
-                                when exists' $ copyFile src dst
-                                ) rootFiles
+    pure $ do
+        putStrLn $ "Creating " ++ projectName ++ " from " ++ scaffoldType ++ " scaffold..."
+        when usePrefix $ putStrLn $ "Prefix: " ++ prefix ++ ".*"
 
-                            -- Rename project.cabal → {name}.cabal
-                            let srcCabal = "project.cabal"
-                                dstCabal = scaffoldType ++ ".cabal"
-                            srcCabalExists <- doesFileExist srcCabal
-                            when srcCabalExists $ renameFile srcCabal dstCabal
+        -- Copy root files to ./
+        mapM_ (\f -> do
+            let src = templateDir </> f
+                dst = f
+            exists' <- doesFileExist src
+            when exists' $ copyFile src dst
+            ) rootFiles
 
-                            -- Copy remaining files to targetDir
-                            createDirectoryIfMissing True targetDir
-                            entries <- listDirectory templateDir
-                            mapM_ (\entry -> do
-                                let srcPath = templateDir </> entry
-                                    dstPath = targetDir </> entry
-                                when (entry `notElem` rootFiles) $ do
-                                    isDir <- doesDirectoryExist srcPath
-                                    if isDir
-                                        then copyDir srcPath dstPath
-                                        else copyFile srcPath dstPath
-                                ) entries
+        -- Rename project.cabal → {name}.cabal
+        let srcCabal = "project.cabal"
+            dstCabal = projectName ++ ".cabal"
+        srcCabalExists <- doesFileExist srcCabal
+        when srcCabalExists $ renameFile srcCabal dstCabal
 
-                            -- Prefix Haskell modules in root
-                            rootHs <- filter (".hs" `isSuffixOf`) <$> listDirectory "."
-                            mapM_ (\f -> prefixHsFile f prefix) rootHs
+        -- Copy remaining files
+        if usePrefix
+            then do
+                createDirectoryIfMissing True targetDir
+                entries <- listDirectory templateDir
+                mapM_ (\entry -> do
+                    let srcPath = templateDir </> entry
+                        dstPath = targetDir </> entry
+                    when (entry `notElem` rootFiles) $ do
+                        isDir <- doesDirectoryExist srcPath
+                        if isDir
+                            then copyDir srcPath dstPath
+                            else copyFile srcPath dstPath
+                    ) entries
+            else do
+                entries <- listDirectory templateDir
+                mapM_ (\entry -> do
+                    let srcPath = templateDir </> entry
+                        dstPath = entry
+                    when (entry `notElem` rootFiles) $ do
+                        isDir <- doesDirectoryExist srcPath
+                        if isDir
+                            then copyDir srcPath dstPath
+                            else copyFile srcPath dstPath
+                    ) entries
 
-                            -- Prefix Haskell modules in targetDir
-                            let prefixDir dir = do
-                                    files <- filter (".hs" `isSuffixOf`) <$> listDirectory dir
-                                    mapM_ (\f -> prefixHsFile (dir </> f) prefix) files
-                                    subDirs <- filterM doesDirectoryExist =<< map (dir </>) <$> listDirectory dir
-                                    mapM_ prefixDir subDirs
-                            prefixDir targetDir
+        -- Prefix Haskell modules if needed
+        when usePrefix $ do
+            rootHs <- filter (".hs" `isSuffixOf`) <$> listDirectory "."
+            mapM_ (\f -> prefixHsFile f prefix localModules) rootHs
 
-                            putStrLn $ "\nDone! Next steps:"
-                            putStrLn $ "  lurk run"
+            let prefixDir dir = do
+                    files <- filter (".hs" `isSuffixOf`) <$> listDirectory dir
+                    mapM_ (\f -> prefixHsFile (dir </> f) prefix localModules) files
+                    subDirs <- filterM doesDirectoryExist =<< map (dir </>) <$> listDirectory dir
+                    mapM_ prefixDir subDirs
+            prefixDir targetDir
+
+        putStrLn $ "\nDone! Next steps:"
+        putStrLn $ "  lurk run"
+
+promptCustomDir :: IO String
+promptCustomDir = do
+    putStrLn "Directory name (letters only):"
+    putStr "> "
+    name <- getLine
+    let cleaned = filter isAlpha name
+    if null cleaned
+        then do
+            putStrLn "Error: Name must contain at least one letter."
+            promptCustomDir
+        else pure (capitalize cleaned)
+
+promptProjectName :: String -> IO String
+promptProjectName defaultName = do
+    putStrLn $ "Project name [" ++ defaultName ++ "]:"
+    putStr "> "
+    name <- getLine
+    let cleaned = filter isAlpha name
+    if null cleaned
+        then pure defaultName
+        else pure (capitalize cleaned)
 
 -- | Copy a directory recursively, skipping hidden files
 copyDir :: FilePath -> FilePath -> IO ()
@@ -412,39 +459,65 @@ copyDir src dest = do
         ) entries
 
 -- | Prefix all module references in a Haskell source file
-prefixHsFile :: FilePath -> String -> IO ()
-prefixHsFile filePath prefix = do
+prefixHsFile :: FilePath -> String -> Set.Set T.Text -> IO ()
+prefixHsFile filePath prefix localModules = do
     content <- TIO.readFile filePath
-    let prefixed = applyModulePrefix prefix content
+    let prefixed = applyModulePrefix prefix localModules content
     TIO.writeFile filePath prefixed
 
 -- | Apply module prefix to module declarations and import statements
-applyModulePrefix :: String -> T.Text -> T.Text
-applyModulePrefix prefix text = T.concat $ map processLine (T.lines text)
+applyModulePrefix :: String -> Set.Set T.Text -> T.Text -> T.Text
+applyModulePrefix prefix localModules text = T.intercalate "\n" $ map processLine (T.lines text)
   where
     p = T.pack prefix
+    firstComponents = Set.map (T.takeWhile (/= '.')) localModules
 
     processLine line
-        | "module " `T.isPrefixOf` stripped && ("where" `T.isInfixOf` stripped || "(" `T.isInfixOf` stripped) =
+        | "module Main " `T.isPrefixOf` stripped = line
+        | "module " `T.isPrefixOf` stripped =
             let afterKw = T.drop 7 line
                 (name, rest) = T.break (\c -> c == ' ' || c == '(' || c == '\n') afterKw
-            in if not (T.null name) && T.all (\c -> isAlpha c || c == '_' || c == '\'') name
+            in if not (T.null name) && name `Set.member` localModules
                then "module " <> p <> "." <> name <> rest
                else line
         | "import " `T.isPrefixOf` stripped =
             let afterKw = T.drop 7 line
                 (name, rest) = T.break (\c -> c == ' ' || c == '(' || c == '\n' || c == '\r') afterKw
-            in if not (T.null name) && T.all (\c -> isAlpha c || c == '_' || c == '\'') name
+                firstComponent = T.takeWhile (/= '.') name
+            in if not (T.null name) && firstComponent `Set.member` firstComponents
                then "import " <> p <> "." <> name <> rest
                else line
         | otherwise = line
+      where stripped = T.stripStart line
+
+-- | Discover all local module names from template .hs files
+discoverLocalModules :: FilePath -> IO (Set.Set T.Text)
+discoverLocalModules dir = do
+    entries <- listDirectory dir
+    let hsFiles = filter (".hs" `isSuffixOf`) entries
+    contents <- mapM (\f -> TIO.readFile (dir </> f)) hsFiles
+    let moduleNames = concatMap extractModuleNames contents
+    subDirs <- filterM doesDirectoryExist =<< mapM (\d -> pure (dir </> d)) (filter (\d -> not (null d) && head d /= '.') entries)
+    subModuleSets <- mapM discoverLocalModules subDirs
+    return $ Set.unions (Set.fromList moduleNames : subModuleSets)
+  where
+    extractModuleNames :: T.Text -> [T.Text]
+    extractModuleNames = concatMap extractModuleName . T.lines
+
+    extractModuleName :: T.Text -> [T.Text]
+    extractModuleName line
+        | "module " `T.isPrefixOf` stripped =
+            let afterKw = T.drop 7 line
+                name = T.takeWhile (\c -> isAlpha c || c == '_' || c == '\'' || c == '.') afterKw
+            in [name | not (T.null name) && name /= "Main"]
+        | otherwise = []
       where stripped = T.stripStart line
 
 -- | Capitalize first letter of each word, lowercasing the rest
 -- Handles camelCase and snake_case: myApp → MyApp, my_app → My_App
 capitalize :: String -> String
 capitalize "" = ""
-capitalize (c:cs) = toUpper c : cs
+capitalize s = toUpper (head s) : tail s
 
 -- | Prompt user to choose from numbered options
 promptChoice :: String -> [(String, String)] -> IO String

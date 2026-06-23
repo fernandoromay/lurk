@@ -19,23 +19,6 @@ library
                         ImplicitParams
     hs-source-dirs:   .
 
-    data-files:       templates/web/Main.hs
-                      templates/web/Router.hs
-                      templates/web/Language.hs
-                      templates/web/Paths.hs
-                      templates/web/cabal.project
-                      templates/web/project.cabal
-                      templates/web/Controller/Static.hs
-                      templates/web/Locale/Prelude.hs
-                      templates/web/Locale/Partial.hs
-                      templates/web/Locale/Home.hs
-                      templates/web/View/Prelude.hs
-                      templates/web/View/Home.hs
-                      templates/web/View/Partial.hs
-                      templates/web/View/Layout/Default.hs
-                      templates/web/public/css/common.css
-                      templates/web/public/js/common.js
-
     exposed-modules:  Lurk.Prelude
                       Lurk.App
                       Lurk.Assets
@@ -95,7 +78,25 @@ executable lurk
     default-extensions: OverloadedStrings
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
     main-is:          Main.hs
-    other-modules:    Log
+    other-modules:    Log,
+                      Paths_lurk
+    autogen-modules:  Paths_lurk
+    data-files:       templates/website/Main.hs
+                      templates/website/Router.hs
+                      templates/website/Language.hs
+                      templates/website/Paths.hs
+                      templates/website/cabal.project
+                      templates/website/project.cabal
+                      templates/website/Controller/Static.hs
+                      templates/website/Locale/Prelude.hs
+                      templates/website/Locale/Partial.hs
+                      templates/website/Locale/Home.hs
+                      templates/website/View/Prelude.hs
+                      templates/website/View/Home.hs
+                      templates/website/View/Partial.hs
+                      templates/website/View/Layout/Default.hs
+                      templates/website/public/css/common.css
+                      templates/website/public/js/common.js
     hs-source-dirs:   cli
     build-depends:    base ^>=4.17.2.1,
                       directory,
