@@ -6,6 +6,23 @@ license:            MIT
 author:             Lurk Team
 build-type:         Simple
 
+extra-source-files: templates/website/Main.hs
+                    templates/website/Router.hs
+                    templates/website/Language.hs
+                    templates/website/Paths.hs
+                    templates/website/cabal.project
+                    templates/website/project.cabal
+                    templates/website/Controller/Static.hs
+                    templates/website/Locale/Prelude.hs
+                    templates/website/Locale/Partial.hs
+                    templates/website/Locale/Home.hs
+                    templates/website/View/Prelude.hs
+                    templates/website/View/Home.hs
+                    templates/website/View/Partial.hs
+                    templates/website/View/Layout/Default.hs
+                    templates/website/public/css/common.css
+                    templates/website/public/js/common.js
+
 library
     default-language: GHC2021
     default-extensions: OverloadedStrings
@@ -78,26 +95,7 @@ executable lurk
     default-extensions: OverloadedStrings
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
     main-is:          Main.hs
-    data-dir:         .
-    other-modules:    Log,
-                      Paths_lurk
-    autogen-modules:  Paths_lurk
-    data-files:       templates/website/Main.hs
-                      templates/website/Router.hs
-                      templates/website/Language.hs
-                      templates/website/Paths.hs
-                      templates/website/cabal.project
-                      templates/website/project.cabal
-                      templates/website/Controller/Static.hs
-                      templates/website/Locale/Prelude.hs
-                      templates/website/Locale/Partial.hs
-                      templates/website/Locale/Home.hs
-                      templates/website/View/Prelude.hs
-                      templates/website/View/Home.hs
-                      templates/website/View/Partial.hs
-                      templates/website/View/Layout/Default.hs
-                      templates/website/public/css/common.css
-                      templates/website/public/js/common.js
+    other-modules:    Log
     hs-source-dirs:   cli
     build-depends:    base ^>=4.17.2.1,
                       directory,
@@ -110,7 +108,8 @@ executable lurk
                       containers,
                       temporary,
                       lurk,
-                      ansi-terminal
+                      ansi-terminal,
+                      file-embed
 
 test-suite lurk-tests
     type:             exitcode-stdio-1.0

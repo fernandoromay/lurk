@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Main where
 
 import System.Environment (getArgs, lookupEnv, setEnv)
@@ -8,7 +9,7 @@ import System.FilePath
 import System.IO (hPutStr, hClose)
 import System.IO.Temp (withSystemTempFile)
 import Control.Monad (filterM, when, unless)
-import Data.List (isSuffixOf, sort, isInfixOf)
+import Data.List (isPrefixOf, isSuffixOf, sort, isInfixOf)
 import Data.Char (isAsciiUpper, isAlpha, isLower, toLower, toUpper)
 import System.Info (os)
 import Data.Maybe (fromMaybe, isNothing)
@@ -20,12 +21,19 @@ import qualified Lurk.Deploy as Deploy
 import qualified Lurk.Deploy.SSH as DeploySSH
 import qualified Lurk.Deploy.Docker as DeployDocker
 import qualified Log
-import Paths_lurk (getDataDir)
+import Data.FileEmbed (embedDir)
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import qualified Data.Text.Encoding as TE
 import Data.Aeson (Value(..), Object, fromJSON, parseJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.Aeson.Key as Key
 import Data.Aeson.Types (parseMaybe)
+
+-- | All scaffold templates embedded at compile time
+scaffoldTemplates :: [(FilePath, ByteString)]
+scaffoldTemplates = $(embedDir "templates")
 
 main :: IO ()
 main = do
@@ -306,74 +314,89 @@ buildProject = do
 -- | Create a new project from a scaffold template
 newProject :: String -> IO ()
 newProject scaffoldType = do
-    templatesDir <- getDataDir
-    let scaffoldsDir = templatesDir </> "templates"
-    exists <- doesDirectoryExist scaffoldsDir
-    if not exists
-        then putStrLn $ "Error: Templates directory not found at " ++ scaffoldsDir
-        else do
-            available <- filterM (\d -> doesDirectoryExist (scaffoldsDir </> d))
-                =<< listDirectory scaffoldsDir
-            if null available
-                then putStrLn "Error: No scaffold types available."
-                else if scaffoldType `notElem` available
-                    then putStrLn $ "Error: Unknown scaffold type '" ++ scaffoldType ++ "'.\nAvailable types: " ++ unwords available
-                    else do
-                        target <- promptChoice "Where do you want to create the project?"
-                            [ ("Root directory (.)", ".")
-                            , ("Web/ subdirectory", "Web")
-                            , ("Custom directory", "")
-                            ]
+    let available = availableScaffoldTypes
+    if null available
+        then putStrLn "Error: No scaffold types available."
+        else if scaffoldType `notElem` available
+            then putStrLn $ "Error: Unknown scaffold type '" ++ scaffoldType ++ "'.\nAvailable types: " ++ unwords available
+            else do
+                target <- promptChoice "Where do you want to create the project?"
+                    [ ("Root directory (.)", ".")
+                    , ("Web/ subdirectory", "Web")
+                    , ("Custom directory", "")
+                    ]
 
-                        targetDir <- case target of
-                            "." -> pure "."
-                            "" -> promptCustomDir
-                            custom -> pure custom
+                targetDir <- case target of
+                    "." -> pure "."
+                    "" -> promptCustomDir
+                    custom -> pure custom
 
-                        defaultName <- case targetDir of
-                            "." -> takeBaseName <$> getCurrentDirectory
-                            d -> pure d
-                        projectName <- promptProjectName (capitalize (filter isAlpha defaultName))
+                defaultName <- case targetDir of
+                    "." -> takeBaseName <$> getCurrentDirectory
+                    d -> pure d
+                projectName <- promptProjectName (capitalize (filter isAlpha defaultName))
 
-                        let usePrefix = targetDir /= "."
-                            prefix = if usePrefix then
-                                        if target == "Web" then "Web"
-                                        else capitalize targetDir
-                                     else ""
+                let usePrefix = targetDir /= "."
+                    prefix = if usePrefix then
+                                if target == "Web" then "Web"
+                                else capitalize targetDir
+                             else ""
 
-                        scaffold <- buildScaffold scaffoldsDir scaffoldType targetDir projectName prefix usePrefix
+                scaffold <- buildScaffold scaffoldType targetDir projectName prefix usePrefix
 
-                        -- Check target is empty or doesn't exist
-                        targetExists <- doesDirectoryExist targetDir
-                        if targetDir == "."
-                            then scaffold
-                            else if targetExists
-                                then do
-                                    files <- listDirectory targetDir
-                                    if null files
-                                        then scaffold
-                                        else putStrLn $ "Error: Directory '" ++ targetDir ++ "' is not empty."
-                                else scaffold
+                -- Check target is empty or doesn't exist
+                targetExists <- doesDirectoryExist targetDir
+                if targetDir == "."
+                    then scaffold
+                    else if targetExists
+                        then do
+                            files <- listDirectory targetDir
+                            if null files
+                                then scaffold
+                                else putStrLn $ "Error: Directory '" ++ targetDir ++ "' is not empty."
+                        else scaffold
 
-buildScaffold :: FilePath -> String -> String -> String -> String -> Bool -> IO (IO ())
-buildScaffold scaffoldsDir scaffoldType targetDir projectName prefix usePrefix = do
-    let templateDir = scaffoldsDir </> scaffoldType
+-- | Available scaffold types from embedded templates
+availableScaffoldTypes :: [String]
+availableScaffoldTypes =
+    let cleanPath = dropWhile (== '/')
+        dirs = map (cleanPath . fst) scaffoldTemplates
+        topDirs = Set.toList $ Set.fromList
+            [ head (splitOn '/' dir)
+            | dir <- dirs
+            , '/' `elem` dir
+            ]
+    in topDirs
+  where
+    splitOn _ [] = [""]
+    splitOn c s
+        | null rest = [taken]
+        | otherwise = taken : splitOn c (drop 1 rest)
+      where (taken, rest) = break (== c) s
+
+buildScaffold :: String -> String -> String -> String -> Bool -> IO (IO ())
+buildScaffold scaffoldType targetDir projectName prefix usePrefix = do
+    let templatePrefix = scaffoldType ++ "/"
         rootFiles = ["cabal.project", "project.cabal", "Main.hs", "Router.hs"]
 
-    -- Discover local modules from template
-    localModules <- discoverLocalModules templateDir
+    -- Get template files for this scaffold type (strip leading slashes from embedDir)
+    let cleanPath = dropWhile (== '/')
+        templateFiles = filter (\(fp, _) -> templatePrefix `isPrefixOf` cleanPath fp) scaffoldTemplates
+        relFiles = map (\(fp, content) -> (drop (length templatePrefix) (cleanPath fp), content)) templateFiles
+
+    -- Discover local modules from embedded template content
+    let localModules = discoverLocalModulesFromContent relFiles
 
     pure $ do
         putStrLn $ "Creating " ++ projectName ++ " from " ++ scaffoldType ++ " scaffold..."
         when usePrefix $ putStrLn $ "Prefix: " ++ prefix ++ ".*"
 
-        -- Copy root files to ./
-        mapM_ (\f -> do
-            let src = templateDir </> f
-                dst = f
-            exists' <- doesFileExist src
-            when exists' $ copyFile src dst
-            ) rootFiles
+        -- Write root files to ./
+        mapM_ (\(relPath, content) -> do
+            let dst = takeFileName relPath
+            when (takeFileName relPath `elem` rootFiles) $
+                BS.writeFile dst content
+            ) relFiles
 
         -- Rename project.cabal → {name}.cabal
         let srcCabal = "project.cabal"
@@ -381,31 +404,15 @@ buildScaffold scaffoldsDir scaffoldType targetDir projectName prefix usePrefix =
         srcCabalExists <- doesFileExist srcCabal
         when srcCabalExists $ renameFile srcCabal dstCabal
 
-        -- Copy remaining files
-        if usePrefix
-            then do
-                createDirectoryIfMissing True targetDir
-                entries <- listDirectory templateDir
-                mapM_ (\entry -> do
-                    let srcPath = templateDir </> entry
-                        dstPath = targetDir </> entry
-                    when (entry `notElem` rootFiles) $ do
-                        isDir <- doesDirectoryExist srcPath
-                        if isDir
-                            then copyDir srcPath dstPath
-                            else copyFile srcPath dstPath
-                    ) entries
-            else do
-                entries <- listDirectory templateDir
-                mapM_ (\entry -> do
-                    let srcPath = templateDir </> entry
-                        dstPath = entry
-                    when (entry `notElem` rootFiles) $ do
-                        isDir <- doesDirectoryExist srcPath
-                        if isDir
-                            then copyDir srcPath dstPath
-                            else copyFile srcPath dstPath
-                    ) entries
+        -- Write remaining files
+        mapM_ (\(relPath, content) -> do
+            let dstPath = if usePrefix
+                    then targetDir </> relPath
+                    else relPath
+            when (takeFileName relPath `notElem` rootFiles) $ do
+                createDirectoryIfMissing True (takeDirectory dstPath)
+                BS.writeFile dstPath content
+            ) relFiles
 
         -- Prefix Haskell modules if needed
         when usePrefix $ do
@@ -490,16 +497,12 @@ applyModulePrefix prefix localModules text = T.intercalate "\n" $ map processLin
         | otherwise = line
       where stripped = T.stripStart line
 
--- | Discover all local module names from template .hs files
-discoverLocalModules :: FilePath -> IO (Set.Set T.Text)
-discoverLocalModules dir = do
-    entries <- listDirectory dir
-    let hsFiles = filter (".hs" `isSuffixOf`) entries
-    contents <- mapM (\f -> TIO.readFile (dir </> f)) hsFiles
-    let moduleNames = concatMap extractModuleNames contents
-    subDirs <- filterM doesDirectoryExist =<< mapM (\d -> pure (dir </> d)) (filter (\d -> not (null d) && head d /= '.') entries)
-    subModuleSets <- mapM discoverLocalModules subDirs
-    return $ Set.unions (Set.fromList moduleNames : subModuleSets)
+-- | Discover all local module names from embedded template content
+discoverLocalModulesFromContent :: [(FilePath, ByteString)] -> Set.Set T.Text
+discoverLocalModulesFromContent files =
+    let hsFiles = filter (\(fp, _) -> ".hs" `isSuffixOf` fp) files
+        moduleNames = concatMap (\(_, content) -> extractModuleNames (TE.decodeUtf8 content)) hsFiles
+    in Set.fromList moduleNames
   where
     extractModuleNames :: T.Text -> [T.Text]
     extractModuleNames = concatMap extractModuleName . T.lines
