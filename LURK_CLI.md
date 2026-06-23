@@ -2,6 +2,27 @@
 
 The Lurk CLI is the official deployment and management tool for the Lurk web framework. It is designed to take a Haskell project from local development to a production environment with minimal friction, automating the build, transfer, and activation processes.
 
+## 📦 Installation
+
+Lurk is distributed as a standalone executable. Install it globally using Cabal:
+
+```bash
+cabal install exe:lurk
+```
+
+- **Linux/macOS**: Installs to `~/.cabal/bin/lurk`
+- **Windows**: Installs to `%APPDATA%\cabal\bin\lurk.exe`
+
+Make sure the install directory is in your `PATH`. Most Haskell setups (ghcup) do this automatically.
+
+**Updating**:
+```bash
+cabal install exe:lurk
+```
+This rebuilds and replaces the existing binary with the latest version.
+
+---
+
 ## 🚀 Core Commands
 
 ### `lurk run`
@@ -60,6 +81,24 @@ Use this once at the start of your project or when changing your deployment stra
 Useful when a previous process didn't shut down correctly and is blocking your port.
 - **Usage**: `lurk kill 3000` or simply `lurk kill`.
 - **What it does**: Forcefully terminates any process holding the specified TCP port across all platforms (Linux, macOS, Windows). If no port is specified, it dynamically detects the target port by checking the `PORT` environment variable, falling back to parsing `Config.hs` for `defaultPort`, and finally defaulting to `3000`.
+
+### `lurk new <type>`
+**Purpose**: Project Scaffolding.
+Use this to create a new Lurk project from a scaffold template.
+
+- **Usage**: `lurk new website`
+- **What it does**:
+  1. Lists available scaffold types from the built-in templates.
+  2. Prompts for target location:
+     - **Root directory (.)**: All files flat in the current directory.
+     - **Web/ subdirectory**: Scaffold files go into `./Web/`, root files in `./`.
+     - **Custom directory**: Scaffold files go into `./<dir>/`, root files in `./`. Directory name is automatically capitalized.
+  3. Prompts for a project name.
+  4. Copies the template files, renames the `.cabal` file, and updates `name:` and `executable` fields.
+  5. For subdirectory options, prefixes all local Haskell module declarations and imports (e.g., `Router` becomes `Web.Router`). External imports (`Lurk.*`, `Data.*`, etc.) are left untouched.
+  6. Auto-updates the `.cabal` file's `other-modules` on first `lurk run`.
+
+**Available scaffold types**: `website`
 
 ---
 
