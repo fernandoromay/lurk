@@ -2,7 +2,7 @@ cabal-version:   3.6
 
 -- You can comment what you are not using in this section
 
-name:            prosect -- Make sure to change this
+name:            project -- Make sure to change this
 version:         2026.1.1 -- Use a CalVer for simpler versioning
 synopsis:        -- Short (one-line) description
 description:     -- Long description

@@ -472,7 +472,8 @@ prefixHsFile filePath prefix localModules = do
     let prefixed = applyModulePrefix prefix localModules content
     TIO.writeFile filePath prefixed
 
--- | Apply module prefix to module declarations and import statements
+-- | Apply module prefix to module declarations, import statements,
+-- and module references in export lists and hiding clauses
 applyModulePrefix :: String -> Set.Set T.Text -> T.Text -> T.Text
 applyModulePrefix prefix localModules text = T.intercalate "\n" $ map processLine (T.lines text)
   where
@@ -485,17 +486,34 @@ applyModulePrefix prefix localModules text = T.intercalate "\n" $ map processLin
             let afterKw = T.drop 7 line
                 (name, rest) = T.break (\c -> c == ' ' || c == '(' || c == '\n') afterKw
             in if not (T.null name) && name `Set.member` localModules
-               then "module " <> p <> "." <> name <> rest
-               else line
+               then "module " <> p <> "." <> name <> prefixModuleRefs rest
+               else prefixModuleRefs rest
         | "import " `T.isPrefixOf` stripped =
             let afterKw = T.drop 7 line
                 (name, rest) = T.break (\c -> c == ' ' || c == '(' || c == '\n' || c == '\r') afterKw
                 firstComponent = T.takeWhile (/= '.') name
             in if not (T.null name) && firstComponent `Set.member` firstComponents
-               then "import " <> p <> "." <> name <> rest
+               then "import " <> p <> "." <> name <> prefixModuleRefs rest
                else line
-        | otherwise = line
+        | otherwise = prefixModuleRefs line
       where stripped = T.stripStart line
+
+    -- Replace "module X" references in export lists and hiding clauses
+    prefixModuleRefs :: T.Text -> T.Text
+    prefixModuleRefs = go
+      where
+        go txt
+          | "module " `T.isPrefixOf` txt =
+              let afterKw = T.drop 7 txt
+                  (name, rest) = T.break (\c -> c == ' ' || c == ',' || c == ')' || c == '\n') afterKw
+                  firstComponent = T.takeWhile (/= '.') name
+              in if not (T.null name) && firstComponent `Set.member` firstComponents
+                 then "module " <> p <> "." <> name <> go rest
+                 else txt
+          | T.null txt = txt
+          | otherwise =
+              let (before, after) = T.breakOn "module " txt
+              in before <> go after
 
 -- | Discover all local module names from embedded template content
 discoverLocalModulesFromContent :: [(FilePath, ByteString)] -> Set.Set T.Text
