@@ -9,7 +9,7 @@ import System.IO (hPutStr, hClose)
 import System.IO.Temp (withSystemTempFile)
 import Control.Monad (filterM, when, unless)
 import Data.List (isSuffixOf, sort, isInfixOf)
-import Data.Char (isAsciiUpper)
+import Data.Char (isAsciiUpper, isAlpha, isLower, toLower, toUpper)
 import System.Info (os)
 import Data.Maybe (fromMaybe, isNothing)
 import qualified Data.Text as T
@@ -19,6 +19,7 @@ import qualified Lurk.Deploy as Deploy
 import qualified Lurk.Deploy.SSH as DeploySSH
 import qualified Lurk.Deploy.Docker as DeployDocker
 import qualified Log
+import Paths_lurk (getDataDir)
 import Data.Aeson (Value(..), Object, fromJSON, parseJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.KeyMap as KeyMap
@@ -37,7 +38,8 @@ main = do
             port <- detectPort
             killPort port
         ["kill", port] -> killPort port
-        _ -> putStrLn "Usage: lurk run | lurk build | lurk deploy | lurk deploy --init | lurk kill [port]"
+        ["new", scaffoldType] -> newProject scaffoldType
+        _ -> putStrLn "Usage: lurk run | lurk build | lurk deploy | lurk deploy --init | lurk kill [port] | lurk new <type>"
 
 initDeploy :: IO ()
 initDeploy = do
@@ -300,7 +302,163 @@ buildProject = do
     putStrLn "Building project..."
     callProcess "cabal" ["build", "-v0"]
 
--- | Load .env file if it exists, setting env vars only if not already set
+-- | Create a new project from a scaffold template
+newProject :: String -> IO ()
+newProject scaffoldType = do
+    templatesDir <- getDataDir
+    let scaffoldsDir = templatesDir </> "templates"
+    exists <- doesDirectoryExist scaffoldsDir
+    if not exists
+        then putStrLn $ "Error: Templates directory not found at " ++ scaffoldsDir
+        else do
+            available <- filterM (\d -> doesDirectoryExist (scaffoldsDir </> d))
+                =<< listDirectory scaffoldsDir
+            if null available
+                then putStrLn "Error: No scaffold types available."
+                else if scaffoldType `notElem` available
+                    then putStrLn $ "Error: Unknown scaffold type '" ++ scaffoldType ++ "'.\nAvailable types: " ++ unwords available
+                    else do
+                        target <- promptChoice "Where do you want to create the project?"
+                            [ ("Root directory (.)", ".")
+                            , ("Web/ subdirectory", "Web")
+                            , ("Custom directory", "")
+                            ]
+
+                        targetDir <- case target of
+                            "." -> takeBaseName <$> getCurrentDirectory
+                            "" -> do
+                                putStrLn "Directory name (letters only, camelCase will be capitalized):"
+                                putStr "> "
+                                name <- getLine
+                                let cleaned = filter isAlpha name
+                                if null cleaned
+                                    then putStrLn "Error: Name must contain at least one letter." >> newProject scaffoldType
+                                    else pure cleaned
+                            custom -> pure custom
+
+                        let prefix = capitalize targetDir
+
+                        -- Check target is empty or doesn't exist
+                        targetExists <- doesDirectoryExist targetDir
+                        if targetExists
+                            then do
+                                files <- listDirectory targetDir
+                                if null files
+                                    then scaffold
+                                    else putStrLn $ "Error: Directory '" ++ targetDir ++ "' is not empty."
+                            else scaffold
+
+                        scaffold = do
+                            let templateDir = scaffoldsDir </> scaffoldType
+                                rootFiles = ["cabal.project", "project.cabal", "Main.hs", "Router.hs"]
+
+                            putStrLn $ "Creating " ++ prefix ++ " from " ++ scaffoldType ++ " scaffold..."
+                            putStrLn $ "Prefix: " ++ prefix ++ ".*"
+
+                            -- Copy root files to ./
+                            mapM_ (\f -> do
+                                let src = templateDir </> f
+                                    dst = f
+                                exists' <- doesFileExist src
+                                when exists' $ copyFile src dst
+                                ) rootFiles
+
+                            -- Rename project.cabal → {name}.cabal
+                            let srcCabal = "project.cabal"
+                                dstCabal = scaffoldType ++ ".cabal"
+                            srcCabalExists <- doesFileExist srcCabal
+                            when srcCabalExists $ renameFile srcCabal dstCabal
+
+                            -- Copy remaining files to targetDir
+                            createDirectoryIfMissing True targetDir
+                            entries <- listDirectory templateDir
+                            mapM_ (\entry -> do
+                                let srcPath = templateDir </> entry
+                                    dstPath = targetDir </> entry
+                                when (entry `notElem` rootFiles) $ do
+                                    isDir <- doesDirectoryExist srcPath
+                                    if isDir
+                                        then copyDir srcPath dstPath
+                                        else copyFile srcPath dstPath
+                                ) entries
+
+                            -- Prefix Haskell modules in root
+                            rootHs <- filter (".hs" `isSuffixOf`) <$> listDirectory "."
+                            mapM_ (\f -> prefixHsFile f prefix) rootHs
+
+                            -- Prefix Haskell modules in targetDir
+                            let prefixDir dir = do
+                                    files <- filter (".hs" `isSuffixOf`) <$> listDirectory dir
+                                    mapM_ (\f -> prefixHsFile (dir </> f) prefix) files
+                                    subDirs <- filterM doesDirectoryExist =<< map (dir </>) <$> listDirectory dir
+                                    mapM_ prefixDir subDirs
+                            prefixDir targetDir
+
+                            putStrLn $ "\nDone! Next steps:"
+                            putStrLn $ "  lurk run"
+
+-- | Copy a directory recursively, skipping hidden files
+copyDir :: FilePath -> FilePath -> IO ()
+copyDir src dest = do
+    createDirectoryIfMissing True dest
+    entries <- listDirectory src
+    mapM_ (\entry -> do
+        let srcPath = src </> entry
+            destPath = dest </> entry
+        isDir <- doesDirectoryExist srcPath
+        if isDir
+            then copyDir srcPath destPath
+            else copyFile srcPath destPath
+        ) entries
+
+-- | Prefix all module references in a Haskell source file
+prefixHsFile :: FilePath -> String -> IO ()
+prefixHsFile filePath prefix = do
+    content <- TIO.readFile filePath
+    let prefixed = applyModulePrefix prefix content
+    TIO.writeFile filePath prefixed
+
+-- | Apply module prefix to module declarations and import statements
+applyModulePrefix :: String -> T.Text -> T.Text
+applyModulePrefix prefix text = T.concat $ map processLine (T.lines text)
+  where
+    p = T.pack prefix
+
+    processLine line
+        | "module " `T.isPrefixOf` stripped && ("where" `T.isInfixOf` stripped || "(" `T.isInfixOf` stripped) =
+            let afterKw = T.drop 7 line
+                (name, rest) = T.break (\c -> c == ' ' || c == '(' || c == '\n') afterKw
+            in if not (T.null name) && T.all (\c -> isAlpha c || c == '_' || c == '\'') name
+               then "module " <> p <> "." <> name <> rest
+               else line
+        | "import " `T.isPrefixOf` stripped =
+            let afterKw = T.drop 7 line
+                (name, rest) = T.break (\c -> c == ' ' || c == '(' || c == '\n' || c == '\r') afterKw
+            in if not (T.null name) && T.all (\c -> isAlpha c || c == '_' || c == '\'') name
+               then "import " <> p <> "." <> name <> rest
+               else line
+        | otherwise = line
+      where stripped = T.stripStart line
+
+-- | Capitalize first letter of each word, lowercasing the rest
+-- Handles camelCase and snake_case: myApp → MyApp, my_app → My_App
+capitalize :: String -> String
+capitalize "" = ""
+capitalize (c:cs) = toUpper c : cs
+
+-- | Prompt user to choose from numbered options
+promptChoice :: String -> [(String, String)] -> IO String
+promptChoice question options = do
+    putStrLn question
+    mapM_ (\(i, (label, _)) -> putStrLn $ "  " ++ show i ++ ") " ++ label) (zip [1::Int ..] options)
+    putStr "> "
+    input <- getLine
+    case reads input of
+        [(n, _)] | n >= 1 && n <= length options -> pure (snd (options !! (n - 1)))
+        _ -> do
+            putStrLn "Invalid choice."
+            promptChoice question options
+
 loadDotEnv :: IO ()
 loadDotEnv = do
     exists <- doesFileExist ".env"

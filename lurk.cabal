@@ -19,6 +19,23 @@ library
                         ImplicitParams
     hs-source-dirs:   .
 
+    data-files:       templates/web/Main.hs
+                      templates/web/Router.hs
+                      templates/web/Language.hs
+                      templates/web/Paths.hs
+                      templates/web/cabal.project
+                      templates/web/project.cabal
+                      templates/web/Controller/Static.hs
+                      templates/web/Locale/Prelude.hs
+                      templates/web/Locale/Partial.hs
+                      templates/web/Locale/Home.hs
+                      templates/web/View/Prelude.hs
+                      templates/web/View/Home.hs
+                      templates/web/View/Partial.hs
+                      templates/web/View/Layout/Default.hs
+                      templates/web/public/css/common.css
+                      templates/web/public/js/common.js
+
     exposed-modules:  Lurk.Prelude
                       Lurk.App
                       Lurk.Assets

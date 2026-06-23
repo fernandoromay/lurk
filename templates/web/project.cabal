@@ -1,0 +1,76 @@
+cabal-version:   3.6
+
+-- You can comment what you are not using in this section
+
+name:            prosect -- Make sure to change this
+version:         2026.1.1 -- Use a CalVer for simpler versioning
+synopsis:        -- Short (one-line) description
+description:     -- Long description
+
+license:         NONE
+-- copyright:    -- Copyright notice
+
+author:          -- Your name
+maintainer:      -- Your email
+
+build-type:      Simple
+
+extra-doc-files:    -- Extra files such as a CHANGELOG or a README
+
+extra-source-files: -- Extras such as examples, or tutorial modules
+
+common warnings
+    ghc-options: -Wall
+
+-- ------------------------------------------------------------
+
+common extensions
+    default-language:   GHC2021
+    default-extensions: OverloadedStrings
+                        OverloadedRecordDot
+                        DeriveDataTypeable
+                        DeriveGeneric
+                        QuasiQuotes
+                        TemplateHaskell
+                        DuplicateRecordFields
+                        ImplicitParams
+                        DataKinds
+                        TypeApplications
+                        ExtendedDefaultRules
+
+-- ------------------------------------------------------------
+
+executable project --Make sure to change this (commonly your project's name)
+    import:          warnings, extensions
+    main-is:         Main.hs
+    hs-source-dirs:  .
+    ghc-options:     -Wno-missing-home-modules -Wno-dodgy-exports -threaded -rtsopts -with-rtsopts=-N
+    other-modules:
+                     Controller.Static,
+                     Language,
+                     Locale.Partial,
+                     Locale.Home,
+                     Paths,
+                     Router,
+                     View.Home,
+                     View.Layout.Default,
+                     View.Partial,
+                     View.Prelude
+    build-depends:   base ^>=4.17.2.1,
+                     lurk,
+                     scotty,
+                     text,
+                     wai,
+                     warp,
+                     containers,
+                     aeson,
+                     mtl,
+                     http-types,
+                     bytestring,
+                     megaparsec,
+                     template-haskell,
+                     directory,
+                     process,
+                     time,
+                     network,
+                     connection
