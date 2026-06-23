@@ -334,7 +334,7 @@ newProject scaffoldType = do
                 defaultName <- case targetDir of
                     "." -> takeBaseName <$> getCurrentDirectory
                     d -> pure d
-                projectName <- promptProjectName (capitalize (filter isAlpha defaultName))
+                projectName <- promptProjectName (normalizeName defaultName)
 
                 let usePrefix = targetDir /= "."
                     prefix = if usePrefix then
@@ -398,11 +398,17 @@ buildScaffold scaffoldType targetDir projectName prefix usePrefix = do
                 BS.writeFile dst content
             ) relFiles
 
-        -- Rename project.cabal → {name}.cabal
+        -- Rename project.cabal → {name}.cabal and update name/executable fields
         let srcCabal = "project.cabal"
             dstCabal = projectName ++ ".cabal"
         srcCabalExists <- doesFileExist srcCabal
-        when srcCabalExists $ renameFile srcCabal dstCabal
+        when srcCabalExists $ do
+            renameFile srcCabal dstCabal
+            cabalContent <- TIO.readFile dstCabal
+            let updated = T.replace "name:            project" ("name:            " <> T.pack projectName)
+                        $ T.replace "executable project" ("executable " <> T.pack projectName)
+                        cabalContent
+            TIO.writeFile dstCabal updated
 
         -- Write remaining files
         mapM_ (\(relPath, content) -> do
@@ -431,25 +437,25 @@ buildScaffold scaffoldType targetDir projectName prefix usePrefix = do
 
 promptCustomDir :: IO String
 promptCustomDir = do
-    putStrLn "Directory name (letters only):"
+    putStrLn "Directory name:"
     putStr "> "
     name <- getLine
-    let cleaned = filter isAlpha name
+    let cleaned = filter (\c -> isAlpha c || c == ' ') name
     if null cleaned
         then do
             putStrLn "Error: Name must contain at least one letter."
             promptCustomDir
-        else pure (capitalize cleaned)
+        else pure (capitalize (filter isAlpha cleaned))
 
 promptProjectName :: String -> IO String
 promptProjectName defaultName = do
     putStrLn $ "Project name [" ++ defaultName ++ "]:"
     putStr "> "
     name <- getLine
-    let cleaned = filter isAlpha name
+    let cleaned = normalizeName name
     if null cleaned
         then pure defaultName
-        else pure (capitalize cleaned)
+        else pure cleaned
 
 -- | Copy a directory recursively, skipping hidden files
 copyDir :: FilePath -> FilePath -> IO ()
@@ -534,11 +540,14 @@ discoverLocalModulesFromContent files =
         | otherwise = []
       where stripped = T.stripStart line
 
--- | Capitalize first letter of each word, lowercasing the rest
--- Handles camelCase and snake_case: myApp → MyApp, my_app → My_App
+-- | Capitalize first letter
 capitalize :: String -> String
 capitalize "" = ""
 capitalize s = toUpper (head s) : tail s
+
+-- | Normalize project name: lowercase, spaces to hyphens
+normalizeName :: String -> String
+normalizeName = map (\c -> if c == ' ' then '-' else toLower c) . filter (\c -> isAlpha c || c == ' ')
 
 -- | Prompt user to choose from numbered options
 promptChoice :: String -> [(String, String)] -> IO String
