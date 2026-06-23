@@ -394,8 +394,13 @@ buildScaffold scaffoldType targetDir projectName prefix usePrefix = do
         -- Write root files to ./
         mapM_ (\(relPath, content) -> do
             let dst = takeFileName relPath
-            when (takeFileName relPath `elem` rootFiles) $
-                BS.writeFile dst content
+            when (takeFileName relPath `elem` rootFiles) $ do
+                -- Fix ServeStatic path when using subdirectory
+                let finalContent = if usePrefix && takeFileName relPath == "Router.hs"
+                        then let t = TE.decodeUtf8 content
+                             in TE.encodeUtf8 $ T.replace "\"public\"" ("\"" <> T.pack targetDir <> "/public\"") t
+                        else content
+                BS.writeFile dst finalContent
             ) relFiles
 
         -- Rename project.cabal → {name}.cabal and update name/executable fields
