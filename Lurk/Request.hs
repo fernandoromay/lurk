@@ -1,7 +1,6 @@
 module Lurk.Request
     ( preferredLanguages
     , resolveLanguage
-    , cfCountry
     , clientIp
     , ipChain
     , parseIpChain
@@ -29,16 +28,7 @@ preferredLanguages = do
 parseAcceptLanguage :: Text -> [Text]
 parseAcceptLanguage = map (T.takeWhile (/= ';') . T.strip) . T.splitOn ","
 
--- Identify the user's country using the Cloudflare 'CF-IPCountry' header
-cfCountry :: Action (Maybe Text)
-cfCountry = do
-    req <- request
-    let headers = Wai.requestHeaders req
-    case lookup "CF-IPCountry" headers of
-        Nothing -> pure Nothing
-        Just val -> pure $ Just (TE.decodeUtf8 val)
-
--- Find the first supported language that matches the browser's preferences
+-- | Find the first supported language that matches the browser's preferences
 resolveLanguage :: [Text] -> [Text] -> Maybe Text
 resolveLanguage supported preferred =
     listToMaybe [ s | p <- preferred, s <- supported, s == p ]

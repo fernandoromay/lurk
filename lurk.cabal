@@ -43,6 +43,7 @@ library
     exposed-modules:  Lurk.Prelude
                       Lurk.App
                       Lurk.Assets
+                      Lurk.Cloudflare
                       Lurk.Cookie
                       Lurk.CSRF
                       Lurk.Email.SMTP
