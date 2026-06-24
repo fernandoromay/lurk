@@ -6,41 +6,9 @@
 
 ### Default Error Views
 
-Ship `error404View` and `error500View` in a `Lurk.Views` module. Hardcoded
+Ship `error404View` and `error500View` in a `Lurk.View` module. Hardcoded
 English strings. Projects that want custom branding override by defining
 their own.
-
-### Binary Stripping
-
-Add `strip` step to reduce binary size from ~55MB to ~20MB.
-
-### `langPaths` decomposition
-
-Current `langPaths` in `Lurk.Language` combines two concerns: enumerating all languages for a path function, and reverse lookup (finding which page matches `?currentPath`).
-
-**Proposed:** Separate into two primitives.
-
-```haskell
--- Lurk.Routes: enumerate all languages for one path function
-langPathsFor :: (Enum lang, Bounded lang)
-             => (lang -> Text) -> [(Text, Text)]
-langPathsFor pathFn = [(toText lang, pathFn lang) | lang <- allLanguages]
-
--- Project (Paths.hs): reverse lookup — find which page matches current path
-pageTitle :: Language -> Text -> Maybe (Language -> Text)
-```
-
-**Benefits:** Separates concerns, makes `pageAlts` computation explicit, removes subtle fallback behavior. `langPathsFor` is useful on its own (sitemaps, alternate generation).
-
-**Trade-off:** Introduces `pageTitle` in the project that must stay in sync with routes. Current `langPaths` is self-contained but harder to reason about.
-
-### Cleanup: Unused dependencies
-
-`lurk.cabal` library section lists `mtl`, `syb`, `network`, `cookie` but no module imports them.
-
-### Cleanup: Empty CHANGELOG.md (**Not Necessary**)
-
-Will be used once we get to a stable MVP point.
 
 ---
 
@@ -66,19 +34,25 @@ renderOpaque :: Bool -> Opaque -> Text  -- True = bot, False = human
 
 The view decides what gets protected. Not invisible middleware. It can even be generalized to obfuscate forms or other sensitive elements, reducing the risk of bots reaching out.
 
-### `Lurk.Cloudflare` — Typed Cloudflare Headers
+### `Lurk.Cloudflare` — Typed Cloudflare Headers (DONE)
 
-Beyond just `cfCountry`:
+Implemented header lookups:
 
 ```haskell
-cfContinent  :: Action (Maybe Text)
-cfCity       :: Action (Maybe Text)
-cfRegion     :: Action (Maybe Text)
-cfTimezone   :: Action (Maybe Text)
-cfASN        :: Action (Maybe Text)
-cfBotScore   :: Action (Maybe Text)
+cfCountry     :: Action (Maybe Text)
+cfContinent   :: Action (Maybe Text)
+cfCity        :: Action (Maybe Text)
+cfRegion      :: Action (Maybe Text)
+cfTimezone    :: Action (Maybe Text)
+cfASN         :: Action (Maybe Text)
+cfBotScore    :: Action (Maybe Text)
 cfBotVerified :: Action (Maybe Bool)
-turnstileVerify :: Text -> IO Bool  -- CAPTCHA replacement
+```
+
+Pending — requires `http-client` dependency (also useful for AI tool integrations):
+
+```haskell
+turnstileVerify :: Text -> Text -> IO Bool  -- CAPTCHA replacement
 ```
 
 ### Language Detection & Fallback
@@ -113,11 +87,6 @@ Detect at edit time via Language Server or VS Code diagnostics API:
 - Missing `|]` or `|)` terminators
 - `{{ }}` with empty content
 - Nested `[lurk|` without matching close
-
-### `.cabal` Scaffolding
-
-`lurk init` or `lurk new ProjectName` generates a clean template with
-CalVer versioning, pre-configured warnings/extensions, single executable.
 
 ### Remote Build Support
 
@@ -446,20 +415,20 @@ admin dashboard. Surpass Laravel's Filament.
 
 ### Locale modules — For pointfree views
 
-Currently, locale functions are explicit (`getLocale :: Language -> SomeLocale`). Views call them as `Home.getLocale ?lang`. This works but prevents pointfree style in views.
+Currently, locale functions are explicit (`locale :: Language -> SomeLocale`). Views call them as `Home.locale ?lang`. This works but prevents pointfree style in views.
 
-To enable `homeView (Home.getLocale)` in pointfree style, locale functions need `?lang`:
+To enable `homeView (Home.locale)` in pointfree style, locale functions need `?lang`:
 
 ```haskell
 -- Before:
-getLocale :: Language -> HomeLocale
-getLocale EN = HomeLocale {..}
-getLocale ES = HomeLocale {..}
-getLocale KO = HomeLocale {..}
+locale :: Language -> HomeLocale
+locale EN = HomeLocale {..}
+locale ES = HomeLocale {..}
+locale KO = HomeLocale {..}
 
 -- After:
-getLocale :: (?lang :: Language) => HomeLocale
-getLocale = case ?lang of
+locale :: (?lang :: Language) => HomeLocale
+locale = case ?lang of
     EN -> HomeLocale {..}
     ES -> HomeLocale {..}
     KO -> HomeLocale {..}
@@ -467,7 +436,7 @@ getLocale = case ?lang of
 
 **Tradeoff:** This changes 33 locale functions. The benefit is purely aesthetic (pointfree style). The locale layer becomes coupled to the implicit params mechanism.
 
-**Recommendation:** Skip this phase. Keep locale explicit. The 1 `?lang` mention per controller body (`Home.getLocale ?lang`) is acceptable.
+**Recommendation:** Skip this phase. Keep locale explicit. The 1 `?lang` mention per controller body (`Home.locale ?lang`) is acceptable.
 
 ---
 

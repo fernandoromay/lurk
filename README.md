@@ -32,6 +32,7 @@ lib/lurk/
 │   ├── Form.hs           # FormData, FormGuard, withForm, built-in guards
 │   ├── Routes.hs         # redirect, currentPath, trailingSlash
 │   ├── Request.hs        # Request helpers (params, headers, cookies)
+│   ├── Cloudflare.hs     # Typed Cloudflare headers (country, bot score, etc.)
 │   ├── Env.hs            # loadEnv, getEnv, requireEnv
 │   ├── Session.hs        # File-backed session store (TVar) with destroySession
 │   ├── Session/
@@ -133,14 +134,35 @@ Guards run in sequence. First failure triggers the fallback action and short-cir
 
 ### 5. Load environment config
 
+Lurk expects `.env` in the project root. Load it in `Main.hs`:
+
 ```haskell
+module Main where
+
+import Data.Maybe (fromMaybe)
+import Lurk.Env
+import Lurk.Prelude (runLurk)
+import Paths qualified as P (domain)
+import Router (router)
+
+data Config = Config
+    { port   :: Int
+    , domain :: Text
+    }
+
 loadConfig :: IO Config
 loadConfig = do
-    env <- loadEnv
+    env <- loadEnv -- Reads .env file in root directory
     pure Config
-        { port = fromMaybe 3003 (getEnvInt env "PORT")
-        , domain = requireEnv env "DOMAIN"
+        { port   = fromMaybe 3003 (getEnvInt env "PORT")
+        , domain = P.domain
         }
+
+main :: IO ()
+main = do
+    cfg <- loadConfig
+    putStrLn $ "Starting on http://localhost:" ++ show (port cfg)
+    runLurk (port cfg) router
 ```
 
 ## Core API
@@ -378,6 +400,25 @@ maxLength      :: Text -> Int -> Action () -> FormGuard -- field length limit
 -- Session helper
 setFormLoadTime :: Action ()  -- call when rendering form for minSubmitTime
 ```
+
+### `Lurk.Cloudflare`
+
+Typed access to Cloudflare-specific HTTP headers. Requires Cloudflare proxy (free plan works):
+
+```haskell
+import Lurk.Cloudflare
+
+cfCountry     :: Action (Maybe Text)  -- CF-IPCountry ("US", "ES")
+cfContinent   :: Action (Maybe Text)  -- CF-Continent ("NA", "EU")
+cfCity        :: Action (Maybe Text)  -- CF-City ("New York", "Madrid")
+cfRegion      :: Action (Maybe Text)  -- CF-Region ("NY", "MD")
+cfTimezone    :: Action (Maybe Text)  -- CF-Timezone ("America/New_York")
+cfASN         :: Action (Maybe Text)  -- CF-ASNum ("13335")
+cfBotScore    :: Action (Maybe Text)  -- Cf-Bot-Score ("0"-"100")
+cfBotVerified :: Action (Maybe Bool)  -- Cf-Bot-Verified (True/False)
+```
+
+Not re-exported from `Lurk.Prelude` — import `Lurk.Cloudflare` explicitly.
 
 ### `Lurk.Email.SMTP`
 
