@@ -377,7 +377,7 @@ availableScaffoldTypes =
 buildScaffold :: String -> String -> String -> String -> Bool -> IO (IO ())
 buildScaffold scaffoldType targetDir projectName prefix usePrefix = do
     let templatePrefix = scaffoldType ++ "/"
-        rootFiles = ["cabal.project", "project.cabal", "Main.hs", "Router.hs"]
+        rootFiles = ["cabal.project", "project.cabal", "Main.hs", "Router.hs", "env.example"]
 
     -- Get template files for this scaffold type (strip leading slashes from embedDir)
     let cleanPath = dropWhile (== '/')
@@ -393,7 +393,9 @@ buildScaffold scaffoldType targetDir projectName prefix usePrefix = do
 
         -- Write root files to ./
         mapM_ (\(relPath, content) -> do
-            let dst = takeFileName relPath
+            let dst = if takeFileName relPath == "env.example"
+                    then ".env.example"
+                    else takeFileName relPath
             when (takeFileName relPath `elem` rootFiles) $ do
                 -- Fix ServeStatic path when using subdirectory
                 let finalContent = if usePrefix && takeFileName relPath == "Router.hs"

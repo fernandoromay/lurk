@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# LLM Crawler Support
+# See https://llmstxt.org/
+llms: https://domain.com/llms.txt
+
+Sitemap: https://domain.com/sitemap.xml

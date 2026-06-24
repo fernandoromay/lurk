@@ -12,6 +12,7 @@ extra-source-files: templates/website/Main.hs
                     templates/website/Paths.hs
                     templates/website/cabal.project
                     templates/website/project.cabal
+                    templates/website/env.example
                     templates/website/Controller/Static.hs
                     templates/website/Locale/Prelude.hs
                     templates/website/Locale/Partial.hs
@@ -22,6 +23,9 @@ extra-source-files: templates/website/Main.hs
                     templates/website/View/Layout/Default.hs
                     templates/website/public/css/common.css
                     templates/website/public/js/common.js
+                    templates/website/public/robots.txt
+                    templates/website/public/sitemap.xml
+                    templates/website/public/llms.txt
 
 library
     default-language: GHC2021
