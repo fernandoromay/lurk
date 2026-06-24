@@ -64,7 +64,6 @@ executable project
                      warp,
                      containers,
                      aeson,
-                     mtl,
                      http-types,
                      bytestring,
                      megaparsec,
@@ -72,5 +71,4 @@ executable project
                      directory,
                      process,
                      time,
-                     network,
                      connection

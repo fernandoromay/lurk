@@ -68,7 +68,6 @@ library
                       scotty,
                       text,
                       containers,
-                      mtl,
                       megaparsec >= 9.0 && < 9.8,
                       template-haskell,
                       directory,
@@ -78,21 +77,17 @@ library
                       http-types,
                       bytestring,
                       haskell-src-meta,
-                      syb,
                       wai-middleware-static,
                       entropy,
                       stm,
                       wai-extra,
-                      network,
-                      cookie,
                       case-insensitive,
                       aeson,
                       yaml,
                       vector,
                       process,
                       connection,
-                      temporary,
-                      process
+                      temporary
 
 executable lurk
     default-language: GHC2021
