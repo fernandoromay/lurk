@@ -18,14 +18,19 @@ import Data.Word (Word8)
 import Network.Connection qualified as Conn
 import System.Timeout (timeout)
 
+-- | SMTP encryption mode
+data SmtpEncryption = Plain | StartTls | SmtpS
+    deriving (Show, Eq)
+
 -- | Configuration for connecting to an SMTP server
 data SmtpConfig = SmtpConfig
-    { smtpHost     :: Text
-    , smtpPort     :: Int
-    , smtpUsername :: Text
-    , smtpPassword :: Text
-    , smtpFrom     :: Text
-    , smtpFromName :: Text
+    { smtpHost       :: Text
+    , smtpPort       :: Int
+    , smtpUsername   :: Text
+    , smtpPassword   :: Text
+    , smtpFrom       :: Text
+    , smtpFromName   :: Text
+    , smtpEncryption :: Text
     } deriving (Show, Eq)
 
 -- | The email payload
@@ -46,7 +51,7 @@ data EmailError
 instance Exception EmailError
 
 -- | Send an email using SMTP over a TCP connection.
--- Automatically handles TLS upgrading (STARTTLS) if port is not 465 (SMTPS).
+-- Uses 'smtpEncryption' to determine TLS behavior.
 sendEmail :: SmtpConfig -> Email -> IO (Either EmailError ())
 sendEmail config email = do
     let host = T.unpack (smtpHost config)
@@ -54,7 +59,7 @@ sendEmail config email = do
 
     result <- timeout 30000000 $ try $ do
         ctx <- Conn.initConnectionContext
-        let useTls = port == 465
+        let useTls = parseEncryption (smtpEncryption config) == SmtpS
             tlsSettings = Conn.TLSSettingsSimple
                 { Conn.settingDisableCertificateValidation = True
                 , Conn.settingDisableSession = False
@@ -78,7 +83,7 @@ sendEmail config email = do
                 sendSMTPLine conn "EHLO localhost"
                 _ <- expectCode 250 conn "EHLO"
 
-                -- STARTTLS if not port 465
+                -- STARTTLS if not SmtpS
                 unless useTls $ do
                     sendSMTPLine conn "STARTTLS"
                     _ <- expectCode 220 conn "STARTTLS"
@@ -134,6 +139,14 @@ sendEmail config email = do
             Just emailErr -> emailErr
             Nothing -> SmtpConnectionError (show e))
         Just (Right _) -> pure (Right ())
+
+-- | Parse encryption mode (case-insensitive). Defaults to 'StartTls'.
+parseEncryption :: Text -> SmtpEncryption
+parseEncryption val = case T.toLower val of
+    "plain"    -> Plain
+    "starttls" -> StartTls
+    "smtps"    -> SmtpS
+    _          -> StartTls
 
 ----------------------------------------------------------------------
 -- INTERNAL HELPERS

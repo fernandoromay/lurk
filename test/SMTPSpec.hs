@@ -105,10 +105,11 @@ testSendEmailErrors = testGroup "sendEmail error handling"
 
 mkTestConfig :: SmtpConfig
 mkTestConfig = SmtpConfig
-    { smtpHost     = "smtp.test.com"
-    , smtpPort     = 587
-    , smtpUsername = "user@test.com"
-    , smtpPassword = "pass"
-    , smtpFrom     = "from@test.com"
-    , smtpFromName = "Test Sender"
+    { smtpHost       = "smtp.test.com"
+    , smtpPort       = 587
+    , smtpUsername   = "user@test.com"
+    , smtpPassword   = "pass"
+    , smtpFrom       = "from@test.com"
+    , smtpFromName   = "Test Sender"
+    , smtpEncryption = "starttls"
     }
