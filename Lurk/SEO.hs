@@ -72,11 +72,11 @@ renderSEO seo = [lurk|
     }}
     {{case (ogTitle seo) of
         Just t -> (lurk|<meta property="og:title" content="{{t}}">|)
-        _      -> mempty
+        _      -> (lurk|<meta property="og:title" content="{{title seo}}">|)
     }}
     {{case (ogDescription seo) of
         Just d -> (lurk|<meta property="og:description" content="{{d}}">|)
-        _      -> mempty
+        _      -> (lurk|<meta property="og:description" content="{{metaDescription seo}}">|)
     }}
     {{case (ogType seo) of
         Just t -> (lurk|<meta property="og:type" content="{{t}}">|)
@@ -88,7 +88,9 @@ renderSEO seo = [lurk|
     }}
     {{case (ogUrl seo) of
         Just u -> (lurk|<meta property="og:url" content="{{u}}">|)
-        _      -> mempty
+        _ -> case (canonical seo) of
+                Just c -> (lurk|<meta property="og:url" content="{{c}}">|)
+                _      -> mempty
     }}
     {{case (ogSiteName seo) of
         Just n -> (lurk|<meta property="og:site_name" content="{{n}}">|)
