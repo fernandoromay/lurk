@@ -12,16 +12,24 @@ import Lurk.Html
 import Lurk.QQ
 
 data SEO = SEO
-    { title           :: Text
-    , metaTitle       :: Text
-    , metaDescription :: Text
-    , robots          :: Maybe Text
-    , canonical       :: Maybe Text
-    , ogTitle         :: Maybe Text
-    , ogDescription   :: Maybe Text
-    , ogType          :: Maybe Text
-    , ogImage         :: Maybe Text
-    , customTags      :: Html
+    { title             :: Text
+    , metaTitle         :: Text
+    , metaDescription   :: Text
+    , robots            :: Maybe Text
+    , canonical         :: Maybe Text
+    , ogTitle           :: Maybe Text
+    , ogDescription     :: Maybe Text
+    , ogType            :: Maybe Text
+    , ogImage           :: Maybe Text
+    , ogUrl             :: Maybe Text
+    , ogSiteName        :: Maybe Text
+    , twitterCard       :: Maybe Text
+    , twitterTitle      :: Maybe Text
+    , twitterDescription :: Maybe Text
+    , twitterImage      :: Maybe Text
+    , twitterSite       :: Maybe Text
+    , twitterCreator    :: Maybe Text
+    , customTags        :: Html
     }
 
 defaultSEO :: SEO
@@ -37,6 +45,14 @@ defaultSEO = SEO
     , ogDescription = Nothing
     , ogType = Nothing
     , ogImage = Nothing
+    , ogUrl = Nothing
+    , ogSiteName = Nothing
+    , twitterCard = Nothing
+    , twitterTitle = Nothing
+    , twitterDescription = Nothing
+    , twitterImage = Nothing
+    , twitterSite = Nothing
+    , twitterCreator = Nothing
     , customTags = mempty
     }
 
@@ -68,6 +84,38 @@ renderSEO seo = [lurk|
     }}
     {{case (ogImage seo) of
         Just i -> (lurk|<meta property="og:image" content="{{i}}">|)
+        _      -> mempty
+    }}
+    {{case (ogUrl seo) of
+        Just u -> (lurk|<meta property="og:url" content="{{u}}">|)
+        _      -> mempty
+    }}
+    {{case (ogSiteName seo) of
+        Just n -> (lurk|<meta property="og:site_name" content="{{n}}">|)
+        _      -> mempty
+    }}
+    {{case (twitterCard seo) of
+        Just c -> (lurk|<meta name="twitter:card" content="{{c}}">|)
+        _      -> mempty
+    }}
+    {{case (twitterTitle seo) of
+        Just t -> (lurk|<meta name="twitter:title" content="{{t}}">|)
+        _      -> mempty
+    }}
+    {{case (twitterDescription seo) of
+        Just d -> (lurk|<meta name="twitter:description" content="{{d}}">|)
+        _      -> mempty
+    }}
+    {{case (twitterImage seo) of
+        Just i -> (lurk|<meta name="twitter:image" content="{{i}}">|)
+        _      -> mempty
+    }}
+    {{case (twitterSite seo) of
+        Just s -> (lurk|<meta name="twitter:site" content="{{s}}">|)
+        _      -> mempty
+    }}
+    {{case (twitterCreator seo) of
+        Just c -> (lurk|<meta name="twitter:creator" content="{{c}}">|)
         _      -> mempty
     }}
     {{customTags seo}}
