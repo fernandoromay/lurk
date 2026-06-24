@@ -21,8 +21,8 @@ data Point = Point
     , description :: Text
     }
 
-getLocale :: Language -> HomeLocale
-getLocale EN = HomeLocale
+locale :: Language -> HomeLocale
+locale EN = HomeLocale
     { seo = defaultSEO
         { title = "Lurk - A Haskell Web Framework"
         , metaTitle = "Lurk - Compile-time HTML templates for Haskell"
@@ -66,7 +66,7 @@ getLocale EN = HomeLocale
     , finalCtaLink = "https://github.com/fernandoromay/lurk"
     }
 
-getLocale ES = HomeLocale
+locale ES = HomeLocale
     { seo = defaultSEO
         { title = "Lurk - Un Framework Web en Haskell"
         , metaTitle = "Lurk - Templates HTML con verificacion en tiempo de compilacion"
