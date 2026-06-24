@@ -185,7 +185,7 @@ data Language = EN | ES | KO
 ```haskell
 -- Controller: ?lang comes from the router
 homeAction :: (?lang :: Language) => Action ()
-homeAction = render $ homeView (getLocale ?lang)
+homeAction = render $ homeView (locale ?lang)
 
 -- View: uses ViewCtx for the full implicit context
 homeView :: ViewCtx Language => Locale -> Html
