@@ -1,38 +1,20 @@
 module Lurk.App
     ( Config(..)
     , LurkApp
-    , Action
-    , RouteOption(..)
-    , routeSettings
     , runLurk
-    , get
-    , post
-    , getPage
-    , getPages
-    , postAction
-    , postActions
     , getStore
     , getAppEnv
     ) where
 
 import Control.Concurrent.STM (TVar, newTVarIO, readTVarIO, atomically, writeTVar)
 import Data.Text (Text)
-import qualified Data.Text as T
 import System.IO.Unsafe (unsafePerformIO)
-import System.Environment (lookupEnv)
-import Lurk.Routes (trailingSlash)
-import Lurk.Language (allLanguages, withLang)
 import Lurk.Session (SessionStore, newFileSessionStore, cleanupSessions)
 import Lurk.Session.Middleware (sessionMiddleware)
 import Lurk.CSRF (csrfMiddleware)
 import Lurk.Env (Env)
 import qualified Lurk.Env
-import Network.Wai.Middleware.Static (staticPolicy, addBase)
-import Network.Wai.Middleware.ForceSSL (forceSSL)
-import Network.Wai (Middleware)
-import Web.Scotty (ScottyM, middleware, scotty, literal)
-import Web.Scotty qualified as Scotty
-import Lurk.Core (Action)
+import Web.Scotty (ScottyM, middleware, scotty)
 
 -- | Application configuration
 data Config = Config
@@ -71,26 +53,7 @@ getAppEnv = do
 -- | The application monad.
 type LurkApp = ScottyM ()
 
-data RouteOption
-    = TrailingSlashes       -- ^ Enforce trailing slashes
-    | ForceSSL              -- ^ Redirect HTTP to HTTPS
-    | ServeStatic FilePath  -- ^ Serve a dir of static assets
 
--- | A smarter ForceSSL that only runs in production
-smartForceSSL :: Middleware
-smartForceSSL app req respond = do
-    env <- lookupEnv "LURK_ENV"
-    if env == Just "production"
-        then forceSSL app req respond
-        else app req respond
-
--- Apply a list of route-level settings
-routeSettings :: [RouteOption] -> LurkApp
-routeSettings = mapM_ apply
-  where
-    apply TrailingSlashes    = middleware trailingSlash
-    apply ForceSSL           = middleware smartForceSSL
-    apply (ServeStatic dir)  = middleware $ staticPolicy (addBase dir)
 
 -- Start the Lurk application
 runLurk :: Config -> LurkApp -> IO ()
@@ -104,33 +67,3 @@ runLurk cfg app = do
         middleware (sessionMiddleware store)
         middleware (csrfMiddleware store)
         app
-
--- Register a single page
-getPage :: Text -> Action () -> LurkApp
-getPage path = Scotty.get (literal $ T.unpack path)
-
--- | Register a page route for each value in a list (multi-language).
-getPages :: [lang] -> (lang -> Text) -> (lang -> Action()) -> LurkApp
-getPages langs pathFn actionFn =
-    mapM_ (\lang -> getPage (pathFn lang) (actionFn lang)) langs
-
--- Register a post action
-postAction :: Text -> Action () -> LurkApp
-postAction path = Scotty.post (literal $ T.unpack path)
-
--- | Register a post action for each value in a list (multi-language).
-postActions :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
-postActions langs pathFn actionFn =
-    mapM_ (\lang -> postAction (pathFn lang) (actionFn lang)) langs
-
--- | Register a GET route for each language.
--- The action receives @?lang@ implicitly via 'withLang'.
-get :: (Enum lang, Bounded lang)
-    => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
-get pathFn actionFn = getPages allLanguages pathFn (`withLang` actionFn)
-
--- | Register a POST route for each language.
--- The action receives @?lang@ implicitly via 'withLang'.
-post :: (Enum lang, Bounded lang)
-     => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
-post pathFn actionFn = postActions allLanguages pathFn (`withLang` actionFn)
