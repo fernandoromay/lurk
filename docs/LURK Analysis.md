@@ -35,7 +35,7 @@
 | Template control flow | `@if`/`@forEach`  | `@if`/`@foreach`  | `{condition && }` | `{% if %}`        | `<% if %>`        |
 | Component model       | Native functions  | Blade components  | React components  | Template inheritance | Partials       |
 | Variable interpolation| `{{expr}}`        | `{{ $var }}`      | `{var}`           | `{{ var }}`       | `<%= var %>`      |
-| CSS/JS in templates   | `{{expr}}`        | Just works        | Just works        | Just works        | Just works        |
+| CSS/JS in templates   | Just works        | Just works        | Just works        | Just works        | Just works        |
 
 ### Configuration & Environment
 
@@ -70,7 +70,7 @@
 
 | Feature            | Lurk                    | Laravel            | Next.js           | Django         | Rails             |
 |--------------------|-------------------------|--------------------|-------------------|----------------|-------------------|
-| XSS prevention     | `toHtml` escapes `<>&`  | `{{ }}` auto-escape| JSX auto-escape   | `{{ }}` auto-escape | `<%= %>` auto-escape |
+| XSS prevention     | `{{ }}` auto-escape     | `{{ }}` auto-escape| JSX auto-escape   | `{{ }}` auto-escape | `<%= %>` auto-escape |
 | CSRF               | Automatic middleware    | Token verification | Manual            | Middleware     | Middleware        |
 | Session management | File-backed (TVar)      | File/Redis/DB      | Cookie-based      | Cookie/DB/Cache| Cookie/DB/Cache   |
 | Auth primitives    | `Lurk.Auth` (planned)   | Built-in guards    | NextAuth.js       | `django.contrib.auth` | Devise     |
@@ -151,7 +151,7 @@
 
 **Our gap:** Haskell has ~200k developers vs millions for PHP/JS/Python. Small ecosystem, small community.
 
-**Mitigation:** Don't compete on ecosystem size. Compete on what mass-market frameworks can never give: compile-time guarantees. The developer who never debugs a missing template variable or a runtime i18n bug is the developer who never Googles "why is my page blank." Target teams that have been burned by production runtime errors, not teams that need 10,000 packages.
+**Mitigation:** We don't compete on ecosystem size. We compete on what mass-market frameworks can never give: compile-time guarantees. Target teams that have been burned by production runtime errors, not teams that need 10,000 packages.
 
 ### Configuration & Environment
 
@@ -165,7 +165,7 @@
 
 **Our gap:** `.env` file only. No encrypted secrets, no Vault integration, no per-environment config beyond env vars.
 
-**Mitigation:** Ship `Lurk.EncryptedEnv` — encrypted YAML (like Rails credentials) with a master key. Low effort, high perception of maturity. Vault integration can wait.
+**Mitigation:** `Lurk.EncryptedEnv` — encrypted YAML (like Rails credentials) with a master key. Vault integration can wait.
 
 ### Routing
 
@@ -177,7 +177,7 @@
 
 **Why the bests are the best:** Laravel `route('home')`, Django `reverse()`, Rails `root_path` — named routes eliminate hardcoded URLs. Refactor a URL in one place, all links update.
 
-**Our gap:** None. `Paths.hs` defines `accessPath :: Language -> Text` — one function per page, centralized. Change `/pricing/` there and every route + link updates. Type-safe, multi-language, compile-time checked. This IS named routes, implemented as functions instead of string keys.
+**Our gap:** None. `Paths.hs` defines paths (routes) as functions instead of string keys. Type-safe, multi-language, compile-time checked.
 
 ### Forms & Validation
 
@@ -191,13 +191,13 @@
 
 **Our gap:** No validation DSL. `Lurk.Form` handles anti-abuse; field validation is manual `case`/`unless` chains.
 
-**Mitigation:** `Lurk.Validate` — a composable validator: `require "name" |> maxLength 200 |> isEmail`. Returns `Either [Text] FormData`. Project defines rules, framework provides primitives. Don't copy Laravel's Rule classes — use Haskell's type system to make invalid states unrepresentable.
+**Mitigation:** `Lurk.Validate` — composable validator: `require "name" |> maxLength 200 |> isEmail`. Returns `Either [Text] FormData`. We provide primitives, projects define rules. Haskell types make invalid states unrepresentable.
 
 ### Security
 
 | Criteria            | Lurk | Laravel | Next.js | Django | Rails |
 |---------------------|------|---------|---------|--------|-------|
-| XSS prevention      | ★★★★ | ★★★★★   | ★★★★★   | ★★★★★  | ★★★★★ |
+| XSS prevention      | ★★★★★| ★★★★★   | ★★★★★   | ★★★★★  | ★★★★★ |
 | CSRF automatic      | ★★★★★| ★★★★    | ★★      | ★★★★   | ★★★★  |
 | Auth primitives     | ★★★  | ★★★★★   | ★★★★    | ★★★★★  | ★★★★★ |
 | Bot protection      | ★★★★★| ★★      | ★★      | ★★     | ★★    |
@@ -206,7 +206,7 @@
 
 **Our gap:** Raw sessions. No login, no roles, no permissions. Every app builds auth from scratch.
 
-**Mitigation:** `Lurk.Auth` with `login`, `logout`, `currentUser`, `requireAuth`, `requireRole`. Build on existing sessions + CSRF. Ship a minimal but correct core; let packages add OAuth, 2FA, etc.
+**Mitigation:** `Lurk.Auth` — `login`, `logout`, `currentUser`, `requireAuth`, `requireRole`. Build on existing sessions + CSRF. Minimal core; let packages add OAuth, 2FA, etc.
 
 ### Database & ORM
 
@@ -220,7 +220,7 @@
 
 **Our gap:** Nothing. No ORM, no migrations, no query builder.
 
-**Mitigation:** This is the hardest gap. Options: (1) `opaleye` / `squeal` — existing Haskell typed PG libraries, but steep learning curve. (2) Code-gen from schema — define schema in Haskell types, generate migrations. (3) Skip ORM, ship a thin `Lurk.DB` over raw SQL with type-safe parameter binding. Start with (3), iterate toward (2).
+**Mitigation:** Hardest gap. Three options: (1) `opaleye` / `squeal` — existing typed PG libraries, steep learning curve. (2) Code-gen from Haskell types. (3) Thin `Lurk.DB` over raw SQL with type-safe parameter binding. We start with (3), iterate toward (2).
 
 ### Deployment
 
@@ -235,7 +235,7 @@
 
 **Our gap:** `lurk deploy` works but requires SSH setup, systemd config, `lurk.yaml`. No one-click experience.
 
-**Mitigation:** Ship `lurk deploy --target digitalocean` / `--target hetzner` — provision a VPS, install deps, deploy in one command. Partner with a VPS provider for a free-tier integration. The binary advantage (no runtime deps) makes this feasible.
+**Mitigation:** `lurk deploy --target digitalocean` / `--target hetzner` — provision a VPS, install deps, deploy in one command. The binary advantage (no runtime deps) makes this feasible.
 
 ### CLI & Scaffolding
 
@@ -249,7 +249,7 @@
 
 **Our gap:** No `lurk create` commands. Manual file creation + manual `.cabal` updates.
 
-**Mitigation:** `lurk create page ViewName ControllerName` — generate `View/ViewName.hs`, `Locale/ViewName.hs`, update `Router.hs`, register in `.cabal`. Template-based, uses existing module patterns. Medium effort, high daily-use impact.
+**Mitigation:** `lurk create page name` — generates `View/Name.hs`, `Locale/Name.hs`, updates `Router.hs`, registers in `.cabal`. Medium effort, high daily-use impact.
 
 ### Performance
 
@@ -278,7 +278,7 @@
 
 **Our gap:** No date/currency formatting. No locale-aware number/date display. The `Pluralizable` ADT is designed but not shipped.
 
-**Mitigation:** Ship `Lurk.i18n` with `formatDate`, `formatCurrency`, `pluralize`. Use `Data.Text.ICU` for locale-aware formatting. Small module, high perceived completeness.
+**Mitigation:** `Lurk.i18n` with `formatDate`, `formatCurrency`, `pluralize`. Use `Data.Text.ICU` for locale-aware formatting.
 
 ### Overall Summary
 
@@ -316,23 +316,15 @@
 
 1. **No CLI scaffolding** — Laravel has `artisan make:*`, Django has `startapp`. Lurk requires manual file creation. (Planned: `lurk create page`)
 
-2. ~~**No component model**~~ — **CLOSED. Not necessary.** Blade has `<x-button>`, React has `<Button />`. Lurk has native functions.
+2. **No built-in auth** — Laravel has guards, Django has `auth`. Lurk has raw sessions. (Planned: `Lurk.Auth`)
 
-3. ~~**No email abstraction**~~ — **CLOSED.** `Lurk.Email.SMTP` provides self-contained SMTP with STARTTLS/SMTPS.
+3. **No database layer** — Laravel has Eloquent, Django has ORM. Lurk has nothing. (Planned: `Lurk.DB`, very hard)
 
-4. ~~**No form validation DSL**~~ — **CLOSED.** `Lurk.Form` provides composable anti-abuse pipeline. Validation remains project-level (correct design: framework owns security, project owns business rules).
+4. **Haskell learning curve** — The target audience (PHP/JS devs) needs to learn Haskell. This is the biggest barrier.
 
-5. **No built-in auth** — Laravel has guards, Django has `auth`. Lurk has raw sessions. (Planned: `Lurk.Auth`)
+5. **No rate limiting** — Laravel has `ThrottleRequests`. Lurk has nothing built-in. (Planned)
 
-6. **No database layer** — Laravel has Eloquent, Django has ORM. Lurk has nothing. (Planned: `Lurk.DB`, very hard)
-
-7. ~~**Deployment was incomplete**~~ — **CLOSED.** `lurk deploy` is fully wired with SSH, Docker, and Shell providers.
-
-8. **Haskell learning curve** — The target audience (PHP/JS devs) needs to learn Haskell. This is the biggest barrier.
-
-9. **No rate limiting** — Laravel has `ThrottleRequests`. Lurk has nothing built-in. (Planned)
-
-10. **No caching layer** — Laravel has Redis/file caching. Lurk has nothing. (Planned: `Lurk.Cache`)
+6. **No caching layer** — Laravel has Redis/file caching. Lurk has nothing. (Planned: `Lurk.Cache`)
 
 ---
 
@@ -340,11 +332,7 @@
 
 | #    | What               | Effort | Impact | Status | Why                                       |
 | ---- | ------------------ | ------ | ------ | ------ | ----------------------------------------- |
-| 1    | `Lurk.Form`        | Low    | High   | DONE   | Composable anti-abuse pipeline            |
-| 2    | `Lurk.Email.SMTP`  | Low    | High   | DONE   | Self-contained SMTP client                |
-| 3    | `lurk deploy`      | Medium | High   | DONE   | SSH/Docker/Shell providers, CI/CD init    |
-| 4    | `Lurk.Flash`       | Low    | Medium | DONE   | Small, high-UX impact                     |
-| 5    | `Lurk.Cloudflare`  | Medium | High   | OPEN   | Typed Cloudflare headers                  |
+| 5    | `Lurk.Cloudflare`  | Medium | High   | OPEN   | Turnstile still under development         |
 | 6    | `Lurk.Auth`        | Medium | High   | OPEN   | Every app needs auth                      |
 | 7    | `lurk create page` | High   | High   | OPEN   | CLI scaffolding, highest long-term impact |
 | 8    | `Lurk.DB`          | High+  | High+  | OPEN   | Laravel killer, but massive effort        |

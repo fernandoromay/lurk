@@ -56,7 +56,8 @@ lib/lurk/
 │   ├── SessionSpec.hs
 │   ├── CSRFSpec.hs
 │   ├── FlashSpec.hs
-│   └── SMTPSpec.hs
+│   ├── SMTPSpec.hs
+│   └── QQSpec.hs
 ├── lurk.cabal
 └── CHANGELOG.md
 ```
@@ -186,7 +187,7 @@ post :: (Enum lang, Bounded lang)
      => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
 ```
 
-`getPages`/`postActions` remain available for edge cases (explicit language lists):
+`getPages`/`postActions` are available for edge cases (explicit language lists):
 
 ```haskell
 getPages :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
@@ -485,7 +486,7 @@ deploy:
 cabal test lurk-tests
 ```
 
-Tests cover session management (file-backed store, atomic writes, cleanup), CSRF token handling, flash messages (data types, rendering, session integration), and SMTP error handling.
+Tests cover session management (file-backed store, atomic writes, cleanup), CSRF token handling, flash messages (data types, rendering, session integration), SMTP error handling, and QQ parser correctness (string literals, single braces, implicit params, nested lurks).
 
 ## License
 
