@@ -66,12 +66,20 @@ renderSEO seo = [lurk|
     <meta name="title" content="{{metaTitle seo}}">
     <meta name="description" content="{{metaDescription seo}}">
     {{
-      case (robots seo) of
+      case (canonical seo) of
+        Just c -> (lurk|<link rel="canonical" href="{{c}}">|)
+        _      -> mempty
+    }}
+    {{case (robots seo) of
         Just r -> (lurk|<meta name="robots" content="{{r}}">|)
         _      -> mempty
     }}
-    {{case (canonical seo) of
-        Just c -> (lurk|<link rel="canonical" href="{{c}}">|)
+    {{case (ogType seo) of
+        Just t -> (lurk|<meta property="og:type" content="{{t}}">|)
+        _      -> (lurk|<meta property="og:type" content="website">|)
+    }}
+    {{case (ogSiteName seo) of
+        Just n -> (lurk|<meta property="og:site_name" content="{{n}}">|)
         _      -> mempty
     }}
     {{case (ogTitle seo) of
@@ -82,9 +90,11 @@ renderSEO seo = [lurk|
         Just d -> (lurk|<meta property="og:description" content="{{d}}">|)
         _      -> (lurk|<meta property="og:description" content="{{metaDescription seo}}">|)
     }}
-    {{case (ogType seo) of
-        Just t -> (lurk|<meta property="og:type" content="{{t}}">|)
-        _      -> (lurk|<meta property="og:type" content="website">|)
+    {{case (ogUrl seo) of
+        Just u -> (lurk|<meta property="og:url" content="{{u}}">|)
+        _ -> case (canonical seo) of
+                Just c -> (lurk|<meta property="og:url" content="{{c}}">|)
+                _      -> mempty
     }}
     {{case (ogImage seo) of
         Just i -> (lurk|<meta property="og:image" content="{{i}}">|)
@@ -94,47 +104,37 @@ renderSEO seo = [lurk|
         Just i -> (lurk|<meta property="og:image:alt" content="{{i}}">|)
         _      -> mempty
     }}
-    {{case (ogUrl seo) of
-        Just u -> (lurk|<meta property="og:url" content="{{u}}">|)
-        _ -> case (canonical seo) of
-                Just c -> (lurk|<meta property="og:url" content="{{c}}">|)
-                _      -> mempty
-    }}
-    {{case (ogSiteName seo) of
-        Just n -> (lurk|<meta property="og:site_name" content="{{n}}">|)
-        _      -> mempty
-    }}
     {{case (twitterCard seo) of
         Just c -> (lurk|<meta name="twitter:card" content="{{c}}">|)
-        _      -> (lurk|<meta name="twitter:card" content="{{"summary_large_image"}}">|)
+        _      -> (lurk|<meta name="twitter:card" content="summary_large_image">|)
+    }}
+    {{case (twitterSite seo) of
+        Just s -> (lurk|<meta name="twitter:site" content="{{s}}">|)
+        _      -> mempty
     }}
     {{case (twitterTitle seo) of
         Just t -> (lurk|<meta name="twitter:title" content="{{t}}">|)
         _ -> case (ogTitle seo) of
-                Just t -> (lurk|<meta property="og:title" content="{{t}}">|)
-                _      -> (lurk|<meta property="og:title" content="{{title seo}}">|)
+                Just t -> (lurk|<meta name="twitter:title" content="{{t}}">|)
+                _      -> (lurk|<meta name="twitter:title" content="{{title seo}}">|)
     }}
     {{case (twitterDescription seo) of
         Just d -> (lurk|<meta name="twitter:description" content="{{d}}">|)
         _ -> case (ogDescription seo) of
-                Just d -> (lurk|<meta property="og:description" content="{{d}}">|)
-                _ -> (lurk|<meta property="og:description" content="{{metaDescription seo}}">|)
+                Just d -> (lurk|<meta name="twitter:description" content="{{d}}">|)
+                _ -> (lurk|<meta name="twitter:description" content="{{metaDescription seo}}">|)
     }}
     {{case (twitterImage seo) of
         Just i -> (lurk|<meta name="twitter:image" content="{{i}}">|)
         _ -> case (ogImage seo) of
-                Just i -> (lurk|<meta property="og:image" content="{{i}}">|)
+                Just i -> (lurk|<meta name="twitter:image" content="{{i}}">|)
                 _ -> mempty
     }}
     {{case (twitterImageAlt seo) of
         Just i -> (lurk|<meta name="twitter:image:alt" content="{{i}}">|)
         _ -> case (ogImageAlt seo) of
-                Just i -> (lurk|<meta property="og:image:alt" content="{{i}}">|)
+                Just i -> (lurk|<meta name="twitter:image:alt" content="{{i}}">|)
                 _ -> mempty
-    }}
-    {{case (twitterSite seo) of
-        Just s -> (lurk|<meta name="twitter:site" content="{{s}}">|)
-        _      -> mempty
     }}
     {{case (twitterCreator seo) of
         Just c -> (lurk|<meta name="twitter:creator" content="{{c}}">|)
