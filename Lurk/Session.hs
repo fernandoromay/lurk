@@ -16,6 +16,9 @@ module Lurk.Session
     , isSessionExpired
     , refreshIdleExp
     , newSessionExps
+    , storeKey
+    , storeVaultMiddleware
+    , getStoreFromVault
     ) where
 
 import Control.Concurrent (ThreadId, forkIO, threadDelay)
@@ -42,6 +45,9 @@ import System.FilePath ((</>))
 import Lurk.Core (Action)
 import Lurk.Request (request)
 import Network.Wai (Request(..))
+import Network.Wai qualified as Wai
+import Data.Vault.Lazy qualified as Vault
+import System.IO.Unsafe (unsafePerformIO)
 
 type SessionId = Text
 
@@ -52,18 +58,32 @@ data Session = Session
     , sessionIdleExp     :: Maybe UTCTime  -- Refreshes on access.
     }
 
-data SessionStore
-    = InMemoryStore
-        { storeSessions    :: TVar (Map SessionId Session)
-        , storeMaxAge      :: Maybe Int
-        , storeIdleTimeout :: Maybe Int
-        }
-    | FileStore
-        { storeSessions    :: TVar (Map SessionId Session)
-        , storeMaxAge      :: Maybe Int
-        , storeIdleTimeout :: Maybe Int
-        , storeDir         :: FilePath
-        }
+data SessionStore = InMemoryStore
+    { storeSessions    :: TVar (Map SessionId Session)
+    , storeMaxAge      :: Maybe Int
+    , storeIdleTimeout :: Maybe Int
+    } | FileStore
+    { storeSessions    :: TVar (Map SessionId Session)
+    , storeMaxAge      :: Maybe Int
+    , storeIdleTimeout :: Maybe Int
+    , storeDir         :: FilePath
+    }
+
+{-# NOINLINE storeKey #-}
+storeKey :: Vault.Key SessionStore
+storeKey = unsafePerformIO Vault.newKey
+
+storeVaultMiddleware :: SessionStore -> Wai.Middleware
+storeVaultMiddleware store app req respond = do
+    let newVault = Vault.insert storeKey store (Wai.vault req)
+    app req { Wai.vault = newVault } respond
+
+getStoreFromVault :: Action SessionStore
+getStoreFromVault = do
+    req <- request
+    case Vault.lookup storeKey (Wai.vault req) of
+        Just s -> pure s
+        Nothing -> error "SessionStore not found in WAI Vault"
 
 -- | Check if a session has expired based on absolute or idle expiry.
 isSessionExpired :: UTCTime -> Session -> Bool
