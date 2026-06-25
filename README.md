@@ -14,7 +14,7 @@ Lurk compiles your entire application—including HTML templates and multi-langu
 - **`Lurk.Flash`** — One-time session-based messages for success/error feedback.
 - **`Lurk.Form`** — Composable anti-abuse pipeline: honeypot, timing, MX verification, field length. Guards run in `Action` for session access.
 - **`Lurk.Email.SMTP`** — Self-contained SMTP client (STARTTLS/SMTPS). Zero external email library dependencies.
-- **Environment** — Opaque `Env` type with `getEnv`/`requireEnv`/`hasEnv`. Loads `.env` at startup.
+- **Environment** — Direct OS environment access via `getEnv`/`requireEnv`/`hasEnv`. Reads `.env` at startup with `loadEnv`.
 - **Deployment** — `lurk deploy` builds a binary and deploys it via SSH, Docker, or custom shell scripts.
 - **Static assets** — `mkAssetPath` for fingerprinted asset URLs.
 - **SEO** — Structured data types for title, meta, canonical, OpenGraph, structured data.
@@ -140,30 +140,27 @@ Lurk expects `.env` in the project root. Load it in `Main.hs`:
 ```haskell
 module Main where
 
-import Data.Maybe (fromMaybe)
-import Lurk.Env
-import Lurk.Prelude (runLurk)
+import Lurk.Prelude
+import Lurk.App (Config(..))
 import Paths qualified as P (domain)
 import Router (router)
 
-data Config = Config
-    { port   :: Int
-    , domain :: Text
-    }
-
 loadConfig :: IO Config
 loadConfig = do
-    env <- loadEnv -- Reads .env file in root directory
     pure Config
-        { port   = fromMaybe 3003 (getEnvInt env "PORT")
-        , domain = P.domain
+        { port          = 3000
+        , domain        = P.domain
+        , sessionMaxAge = Nothing
+        , sessionIdle   = Nothing
         }
 
 main :: IO ()
 main = do
+    loadEnv -- Reads .env file in root directory
+    -- For a different env file use: loadEnvFile "path/to/file.env"
     cfg <- loadConfig
     putStrLn $ "Starting on http://localhost:" ++ show (port cfg)
-    runLurk (port cfg) router
+    runLurk cfg router
 ```
 
 ## Core API
@@ -227,7 +224,7 @@ navbar = [lurk|...{{navbarLocale ?lang}}...|]
 `ViewCtx` expands to:
 
 ```haskell
-type ViewCtx lang = (?currentPath :: Text, ?params :: [(Text, Text)], ?lang :: lang)
+type ViewCtx lang = (?currentPath :: Text, ?params :: [(Text, Text)], ?lang :: lang, ?csrfToken :: Text)
 ```
 
 The `lang` type variable is polymorphic — use your own language type. Single-language projects work unchanged: `data Language = EN deriving (Eq, Enum, Bounded)`.
@@ -235,12 +232,12 @@ The `lang` type variable is polymorphic — use your own language type. Single-l
 ### Flow
 
 ```
-Router:  get homePath homeAction
-           └─ binds ?lang for each language (EN, ES, KO)
+Router:     get homePath homeAction
+              └─ binds ?lang for each language (EN, ES, KO)
 Controller: homeAction  (?lang :: Language => Action ())
-           └─ passes ?lang to view via implicit scope
-View:    homeView  (?currentPath, ?params, ?lang => Html)
-           └─ renders with ?lang in scope
+              └─ calls render, which binds ?currentPath, ?params, ?csrfToken
+View:       homeView  (ViewCtx Language => Html)
+              └─ renders with ?lang, ?currentPath, ?params, ?csrfToken in scope
 ```
 
 ### `[lurk|...|]` Quasiquoter
@@ -323,27 +320,31 @@ html <- renderHtml [lurk|<p>Hello {{name}}</p>|]
 
 ### `Lurk.Env`
 
-Type-safe environment access:
+Environment access that reads directly from the OS process environment.
+`loadEnv`/`loadEnvFile` must be called at startup to populate it from a `.env` file:
 
 ```haskell
-env <- loadEnv
-getEnv env "PORT"        -- Maybe Text
-requireEnv env "PORT"    -- Text (throws if missing)
-getEnvInt env "PORT"     -- Maybe Int
-hasEnv env "PORT"        -- Bool
+loadEnv                        -- IO () — reads .env in root directory
+loadEnvFile "path/to/file.env" -- IO () — reads a custom env file
+getEnv "PORT"                  -- IO (Maybe Text)
+requireEnv "PORT"              -- IO Text (throws if missing)
+getEnvInt "PORT"               -- IO (Maybe Int)
+getEnvBool "DEBUG"             -- IO (Maybe Bool)
+getEnvWithDefault "ENV" "prod" -- IO Text
+hasEnv "PORT"                  -- IO Bool
 ```
 
 ### `Lurk.Session`
 
-File-backed sessions with TVar storage. Includes `destroySession` for logout support and `cleanupSessions` for periodic expiry:
+File-backed sessions with TVar storage. Includes `destroySession` for logout support and `cleanupSessions` for periodic expiry.
+The session store is automatically threaded through each request via the WAI Vault — you do not need to access it directly.
 
 ```haskell
-store <- getStore
-Session.setSessionValue store sid "key" "value"
-sess <- Session.getSession store
-val <- Session.getSessionValue "key" sess
-destroySession store sid        -- remove session (logout)
-cleanupSessions store           -- remove expired sessions
+-- Accessed inside an Action:
+getSession      :: Action (Maybe Session)           -- current request's session
+getSessionValue :: Text -> Session -> Maybe Text    -- read a key
+setSessionValue :: SessionStore -> SessionId -> Text -> Text -> Action () -- write a key
+destroySession  :: SessionStore -> SessionId -> Action () -- remove session (logout)
 ```
 
 Cookies use the `Secure` flag in production (detected via `LURK_ENV`). Session ID validation prevents path traversal. Atomic file writes prevent corruption.

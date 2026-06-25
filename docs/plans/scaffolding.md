@@ -131,25 +131,21 @@ import Locale.Email.<Name>Thanks qualified as <Thanks>
 -- | Load SMTP configuration from environment
 loadSmtpConfig :: IO (Maybe SmtpConfig)
 loadSmtpConfig = do
-    env <- getAppEnv
-    let mHost = getEnv env "SMTP_HOST"
-        mPort = getEnv env "SMTP_PORT"
-        mUser = getEnv env "SMTP_USER"
-        mPass = getEnv env "SMTP_PASS"
+    mHost <- getEnv "SMTP_HOST"
+    mPort <- getEnvInt "SMTP_PORT"
+    mUser <- getEnv "SMTP_USER"
+    mPass <- getEnv "SMTP_PASS"
     case (mHost, mPort, mUser, mPass) of
         (Just h, Just p, Just u, Just pw) -> do
-            let port = case reads (T.unpack p) of [(n, "")] -> n; _ -> 587
             pure $ Just SmtpConfig
-                { smtpHost = h, smtpPort = port
+                { smtpHost = h, smtpPort = p
                 , smtpUsername = u, smtpPassword = pw
                 , smtpFrom = u, smtpFromName = "TODO"
                 }
         _ -> pure Nothing
 
 loadAdminEmail :: IO (Maybe Text)
-loadAdminEmail = do
-    env <- getAppEnv
-    pure $ getEnv env "ADMIN_EMAIL"
+loadAdminEmail = getEnv "ADMIN_EMAIL"
 
 <name>Action :: (?lang :: Language) => Action ()
 <name>Action = do

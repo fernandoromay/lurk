@@ -5,10 +5,10 @@
 - **`[lurk|...|]` QQ** — Compile-time variable checking. A typo in `{userName}` is a build error, not a runtime blank.
 - **`getPages allLanguages pathFn actionFn`** — Registering routes for all languages in one call.
 - **`postActions`** — Same pattern for POST routes.
-- **Session + CSRF middleware** — File-backed sessions with automatic CSRF validation on POST.
+- **Session + CSRF middleware** — File-backed sessions injected per-request via WAI Vault. Automatic CSRF validation on POST. No global state, no `getStore` in user code.
 - **`Lurk.Form`** — Composable anti-abuse pipeline: honeypot, timing, MX verification, field length. Guards run in `Action` for session access. `withForm` orchestrates the pipeline.
 - **`Lurk.Email.SMTP`** — Self-contained SMTP client (STARTTLS/SMTPS). Zero external email library dependencies.
-- **`Lurk.Env`** — Opaque `Env` type with `getEnv`/`requireEnv`/`hasEnv`. Loads `.env` at startup.
+- **`Lurk.Env`** — Direct OS environment access. `loadEnv`/`loadEnvFile` populate the process environment from a `.env` file at startup; `getEnv`/`requireEnv`/`hasEnv` read directly from the OS — no opaque record, no global state.
 - **`lurk deploy`** — Full deployment pipeline: build → package → transfer → activate. SSH, Docker, and Shell providers via `DeployProvider` typeclass. `--init` generates CI/CD config.
 - **`lurk run` / `lurk build` / `lurk kill`** — Dev server, build, and port management CLI commands.
 
@@ -43,7 +43,7 @@
 |--------------------|-------------------|--------------------------|--------------------------|----------------|------------------------|
 | Config system      | `Lurk.Env`        | `config/*.php` + `.env`  | `next.config.js` + `.env`| `settings.py`  | `config/` + `.env`     |
 | Env loading        | `.env` + process  | `.env` + `config()`      | `.env.local`             | `os.environ`   | `.env` + `credentials` |
-| Type-safe config   | `getEnv`/`requireEnv` | Runtime `config()`    | Runtime `process.env`    | Runtime `os.getenv` | Runtime `ENV[]`    |
+| Type-safe config   | `getEnv`/`requireEnv` (IO, no record) | Runtime `config()`    | Runtime `process.env`    | Runtime `os.getenv` | Runtime `ENV[]`    |
 | Secrets management | `.env` file       | `.env` + Vault           | Varies by hosting        | `secrets.py`   | `credentials.yml`      |
 
 ### Routing
@@ -72,7 +72,7 @@
 |--------------------|-------------------------|--------------------|-------------------|----------------|-------------------|
 | XSS prevention     | `{{ }}` auto-escape     | `{{ }}` auto-escape| JSX auto-escape   | `{{ }}` auto-escape | `<%= %>` auto-escape |
 | CSRF               | Automatic middleware    | Token verification | Manual            | Middleware     | Middleware        |
-| Session management | File-backed (TVar)      | File/Redis/DB      | Cookie-based      | Cookie/DB/Cache| Cookie/DB/Cache   |
+| Session management | File-backed (WAI Vault, per-request) | File/Redis/DB      | Cookie-based      | Cookie/DB/Cache| Cookie/DB/Cache   |
 | Auth primitives    | `Lurk.Auth` (planned)   | Built-in guards    | NextAuth.js       | `django.contrib.auth` | Devise     |
 | Bot protection     | `Lurk.Form` guards      | Manual             | Manual            | Manual         | Manual            |
 | Rate limiting      | Not yet                 | `ThrottleRequests` | Not built-in      | `ratelimit`    | `rack-attack`     |
@@ -143,15 +143,15 @@
 |---------------------|------|---------|---------|--------|-------|
 | Type safety         | ★★★★★| ★★      | ★★★★    | ★★     | ★★    |
 | Template safety     | ★★★★★| ★★★★★   | ★★★★★   | ★★★★   | ★★★★  |
-| Learning curve      | ★★   | ★★★★    | ★★★★★   | ★★★★★  | ★★★★  |
+| Learning curve      | ★★★  | ★★★★    | ★★★★★   | ★★★★★  | ★★★★  |
 | Ecosystem           | ★★   | ★★★★★   | ★★★★★   | ★★★★   | ★★★★  |
 | Community           | ★    | ★★★★★   | ★★★★★   | ★★★★★  | ★★★★  |
 
 **Why the bests are the best:** Laravel/Next.js/Django have massive ecosystems because PHP/JS/Python have millions of devs. Community compounds: more users → more packages → more users.
 
-**Our gap:** Haskell has ~200k developers vs millions for PHP/JS/Python. Small ecosystem, small community.
+**Our gap:** Haskell has ~200k developers vs millions for PHP/JS/Python. Small ecosystem, small community. The initial barrier — GHC setup, cabal, HLS, learning Haskell itself — remains very high.
 
-**Mitigation:** We don't compete on ecosystem size. We compete on what mass-market frameworks can never give: compile-time guarantees. Target teams that have been burned by production runtime errors, not teams that need 10,000 packages.
+**Mitigation:** We don't compete on ecosystem size. We compete on what mass-market frameworks can never give: compile-time guarantees. Target teams that have been burned by production runtime errors, not teams that need 10,000 packages. Our abstractions (WAI Vault for sessions, implicit `?csrfToken`, argument-free env access, `ViewCtx`) significantly lower the day-to-day friction once a developer is over the Haskell hump — hence ★★★ rather than ★★.
 
 ### Configuration & Environment
 
@@ -161,9 +161,9 @@
 | Secrets management  | ★★★  | ★★★★★   | ★★★     | ★★★    | ★★★★  |
 | Simplicity          | ★★★★★| ★★★★    | ★★★     | ★★★    | ★★★★  |
 
-**Why the bests are the best:** Laravel has `.env` + `config()` with caching, Vault integration, and encrypted env files. Rails has `credentials.yml` (encrypted, version-controlled).
+**Why the bests are the best:** Laravel has `.env` + `config()` with caching, Vault integration, and encrypted env files. Rails has `credentials.yml` (AES-256-GCM encrypted, version-controlled — the ciphertext is safe to commit).
 
-**Our gap:** `.env` file only. No encrypted secrets, no Vault integration, no per-environment config beyond env vars.
+**Our gap:** `.env` file only — plain text on disk. No encrypted secrets, no Vault integration, no per-environment config files (staging vs prod), no secret rotation without a server restart. One genuine advantage: `requireEnv` fails at **startup**, not mid-request — a missing secret crashes the server before serving a single response, rather than silently producing a `nil`/`None`/`undefined` that blows up at runtime.
 
 **Mitigation:** `Lurk.EncryptedEnv` — encrypted YAML (like Rails credentials) with a master key. Vault integration can wait.
 
@@ -304,7 +304,7 @@
 
 5. **Type-safe i18n** — Missing translations are compile errors. Laravel/Django discover missing strings at runtime.
 
-6. **Security by default** — CSRF is automatic, sessions are file-backed, config is opaque. No "forgot to add CSRF token" bugs.
+6. **Security by default** — CSRF is automatic, sessions are injected per-request via WAI Vault, `?csrfToken` is injected into every view context. No "forgot to add CSRF token" bugs, no global mutable state.
 
 7. **Composable anti-abuse pipeline** — `Lurk.Form` provides honeypot, timing, MX, and field length guards as composable `FormGuard` values. No other framework ships this.
 
