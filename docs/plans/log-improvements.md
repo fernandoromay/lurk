@@ -16,18 +16,6 @@ Fix race condition in concurrent logging and add minimum log level filtering via
 
 ---
 
-### 6. SMTP Certificate Validation
-**Locking:** LOW — standalone
-**Easiness:** EASY — change one boolean
-
-**Problem:** `settingDisableCertificateValidation = True` — disables TLS certificate verification by default. Insecure.
-
-**Fix:** Add `smtpDisableCertValidation :: Bool` field to `SmtpConfig` (default `False`). Only disable when explicitly configured.
-
-**Files:** `Lurk/Email/SMTP.hs` (line 64)
-
----
-
 ## 1. Per-path mutex (race condition fix)
 
 **Problem:** Two concurrent `writeLog` calls to the same file read the same existing content, then both write — one entry lost.
