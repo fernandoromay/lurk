@@ -7,9 +7,6 @@ import Router
 
 loadConfig :: IO Config
 loadConfig = do
-    env <- loadEnv -- Reads .env file in root directory
-    -- For a different env file use: loadEnvFile "route/to/file.env"
-    pure Config
     pure Config
         { port          = 3000
         , domain        = P.domain
@@ -19,6 +16,8 @@ loadConfig = do
 
 main :: IO ()
 main = do
+    env <- loadEnv -- Reads .env file in root directory
+    -- For a different env file use: loadEnvFile "route/to/file.env"
     cfg <- loadConfig
     putStrLn $ "Starting on http://localhost:" ++ show (port cfg)
     runLurk (port cfg) router
