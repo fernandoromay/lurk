@@ -8,7 +8,7 @@ module View.Prelude
 import Lurk.Prelude hiding (render)
 import Lurk.Prelude qualified as Lurk
 import Language
-import Web.Scotty (request)
+import Lurk.Request (request)
 
 mkAssetPath "public"
 

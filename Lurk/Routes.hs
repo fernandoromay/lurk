@@ -13,15 +13,17 @@ import Data.Text.Lazy qualified as TL
 import Network.HTTP.Types (status301)
 import Network.Wai (rawPathInfo, rawQueryString, responseBuilder)
 import Network.Wai qualified as Wai
-import Web.Scotty qualified as Scotty
+import Lurk.Core (Action)
+import qualified Lurk.Core
+import Lurk.Request (request)
 
 -- | Redirect to the given path (strict 'Text').
 --   Wraps Scotty's redirect which expects lazy 'Text'.
-redirect :: Text -> Scotty.ActionM a
-redirect = Scotty.redirect . TL.fromStrict
+redirect :: Text -> Action a
+redirect = Lurk.Core.redirect . TL.fromStrict
 
-currentPath :: Scotty.ActionM T.Text
-currentPath = TE.decodeUtf8 . rawPathInfo <$> Scotty.request
+currentPath :: Action T.Text
+currentPath = TE.decodeUtf8 . rawPathInfo <$> request
 
 isSubpath :: T.Text -> T.Text -> Bool
 isSubpath = T.isPrefixOf

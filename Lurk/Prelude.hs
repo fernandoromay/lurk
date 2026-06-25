@@ -32,7 +32,6 @@ module Lurk.Prelude
     , deleteCookie
     , notFound
     , module Lurk.SEO
-    , Config(..)
     , LurkApp
     , runLurk
     , routeSettings
@@ -107,10 +106,10 @@ import Lurk.CSRF (CsrfToken, newCsrfToken, getCsrfToken, validateCsrfToken, getS
 import Lurk.Flash (FlashLevel(..), Flash(..), setFlash, getFlash, flashSuccess, flashError, flashWarning, renderFlash, renderFlashMaybe)
 import Lurk.Env (Env, loadEnv, loadEnvFile, getEnv, getEnvInt, getEnvBool, getEnvWithDefault, requireEnv, hasEnv)
 import Lurk.SEO
-import Lurk.App (Config(..), LurkApp, Action, get, post, getPage, getPages, postAction, postActions, routeSettings, runLurk, RouteOption(..), getStore, getAppEnv)
+import Lurk.App (LurkApp, Action, get, post, getPage, getPages, postAction, postActions, routeSettings, runLurk, RouteOption(..), getStore, getAppEnv)
 import Lurk.Language (withLang)
-import Web.Scotty (html, queryParam)
-import Web.Scotty qualified as Scotty
+import Lurk.Core (html, queryParam)
+import Lurk.Core qualified
 import Network.HTTP.Types qualified as Http
 import Prelude
 
@@ -135,4 +134,4 @@ render viewHtml ctx = do
 
 -- | Catch-all route that automatically sets the HTTP 404 status
 notFound :: Action () -> LurkApp
-notFound action = Scotty.notFound (Scotty.status Http.status404 >> action)
+notFound action = Lurk.Core.notFound (Lurk.Core.status Http.status404 >> action)

@@ -30,8 +30,9 @@ import qualified Lurk.Env
 import Network.Wai.Middleware.Static (staticPolicy, addBase)
 import Network.Wai.Middleware.ForceSSL (forceSSL)
 import Network.Wai (Middleware)
-import Web.Scotty (ScottyM, ActionM, middleware, scotty, literal)
+import Web.Scotty (ScottyM, middleware, scotty, literal)
 import Web.Scotty qualified as Scotty
+import Lurk.Core (Action)
 
 -- | Application configuration
 data Config = Config
@@ -69,9 +70,6 @@ getAppEnv = do
 
 -- | The application monad.
 type LurkApp = ScottyM ()
-
--- | The action monad for request handling
-type Action a = ActionM a
 
 data RouteOption
     = TrailingSlashes       -- ^ Enforce trailing slashes

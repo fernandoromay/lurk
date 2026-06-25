@@ -39,12 +39,9 @@ import Data.Word (Word8)
 import System.Entropy (getEntropy)
 import System.Directory (doesDirectoryExist, createDirectoryIfMissing, doesFileExist, removeFile, renameFile, listDirectory)
 import System.FilePath ((</>))
+import Lurk.Core (Action)
+import Lurk.Request (request)
 import Network.Wai (Request(..))
-import Web.Scotty (ActionM, request)
-
--- | The action monad for request handling (same as Lurk.App.Action).
---   Defined here to avoid circular import with Lurk.App.
-type Action a = ActionM a
 
 type SessionId = Text
 

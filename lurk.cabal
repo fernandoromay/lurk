@@ -39,6 +39,7 @@ library
                         DuplicateRecordFields
                         ImplicitParams
     hs-source-dirs:   .
+    other-modules:    Lurk.Core
 
     exposed-modules:  Lurk.Prelude
                       Lurk.App

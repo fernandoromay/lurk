@@ -14,8 +14,8 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Network.Wai qualified as Wai
-import Web.Scotty (request)
-import Lurk.App (Action)
+import Lurk.Request (request)
+import Lurk.Core (Action)
 
 -- | Look up a Cloudflare header from the current request.
 cfHeader :: Text -> Action (Maybe Text)

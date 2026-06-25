@@ -12,9 +12,10 @@ import System.Exit (ExitCode(..))
 import System.Process (readProcessWithExitCode)
 import System.Timeout (timeout)
 import Control.Exception (try, SomeException)
-import Web.Scotty (request)
+import Lurk.Request (request)
 
-import Lurk.App (Action, getStore)
+import Lurk.Core (Action)
+import Lurk.App (getStore)
 import Lurk.Session qualified as Session
 import Lurk.Session (SessionStore(..), Session(..))
 import Lurk.CSRF (getSessionIdFromHeaders, getCachedFormParams)

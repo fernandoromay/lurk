@@ -14,9 +14,10 @@ import Control.Concurrent.STM (readTVarIO)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Control.Monad.IO.Class (liftIO)
-import Web.Scotty (request)
+import Lurk.Request (request)
 
-import Lurk.App (Action, getStore)
+import Lurk.Core (Action)
+import Lurk.App (getStore)
 import Lurk.CSRF (getSessionIdFromHeaders)
 import Lurk.Html (Html(..))
 import Lurk.Session qualified as Session

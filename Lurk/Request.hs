@@ -4,6 +4,8 @@ module Lurk.Request
     , clientIp
     , ipChain
     , parseIpChain
+    , request
+    , LurkRequest
     ) where
 
 import Data.Maybe (listToMaybe)
@@ -12,8 +14,7 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Network.HTTP.Types (hAcceptLanguage)
 import Network.Wai qualified as Wai
-import Web.Scotty (request)
-import Lurk.App (Action)
+import Lurk.Core (Action, request, LurkRequest)
 
 -- Extract preferred languages from the 'Accept-Language' header.
 preferredLanguages :: Action [Text]
