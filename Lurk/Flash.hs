@@ -17,7 +17,6 @@ import Control.Monad.IO.Class (liftIO)
 import Lurk.Request (request)
 
 import Lurk.Core (Action)
-import Lurk.App (getStore)
 import Lurk.CSRF (getSessionIdFromHeaders)
 import Lurk.Html (Html(..))
 import Lurk.Session qualified as Session
@@ -67,7 +66,7 @@ setFlash level msg = do
     case mSid of
         Nothing -> pure ()
         Just sid -> do
-            store <- liftIO getStore
+            store <- Session.getStoreFromVault
             Session.setSessionValue store sid levelKey (levelToText level)
             Session.setSessionValue store sid messageKey msg
 
@@ -79,7 +78,7 @@ getFlash = do
     case mSid of
         Nothing -> pure Nothing
         Just sid -> do
-            store <- liftIO getStore
+            store <- Session.getStoreFromVault
             sess <- liftIO $ readTVarIO (Session.storeSessions store)
             case Map.lookup sid sess of
                 Nothing -> pure Nothing

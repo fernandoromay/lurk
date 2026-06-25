@@ -9,6 +9,7 @@ module Lurk.CSRF
     , cacheFormBody
     , lookupCachedFormParam
     , getCachedFormParams
+    , csrfToken
     ) where
 
 import Control.Concurrent.STM
@@ -23,6 +24,9 @@ import Data.Text.Encoding qualified as TE
 import Data.Word (Word8)
 import Network.HTTP.Types (status403)
 import Network.Wai (Middleware, requestMethod, Request(..))
+import Control.Monad.IO.Class (liftIO)
+import Lurk.Core (Action)
+import Lurk.Request (request)
 import Network.Wai qualified as Wai
 import System.Entropy (getEntropy)
 import System.IO.Unsafe (unsafePerformIO)
@@ -56,6 +60,16 @@ getCachedFormParams sid = atomically $ do
     let params = Map.findWithDefault [] sid cache
     writeTVar formBodyCache (Map.delete sid cache)
     pure params
+
+-- | Automatically retrieve the CSRF token from the current Request Vault
+csrfToken :: Action Text
+csrfToken = do
+    req <- request
+    case getSessionIdFromHeaders req of
+        Nothing -> pure ""
+        Just sid -> do
+            store <- getStoreFromVault
+            liftIO $ getCsrfToken store sid
 
 -- | Generate a CSRF token (32 random bytes, hex-encoded)
 newCsrfToken :: IO CsrfToken

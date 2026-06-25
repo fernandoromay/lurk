@@ -15,9 +15,8 @@ import Control.Exception (try, SomeException)
 import Lurk.Request (request)
 
 import Lurk.Core (Action)
-import Lurk.App (getStore)
 import Lurk.Session qualified as Session
-import Lurk.Session (SessionStore(..), Session(..))
+import Lurk.Session (SessionStore(..), Session(..), getStoreFromVault)
 import Lurk.CSRF (getSessionIdFromHeaders, getCachedFormParams)
 
 -- | Parsed form data extracted from a cached request body.
@@ -93,7 +92,7 @@ minSubmitTime minSeconds onFail fd = do
     case getSessionIdFromHeaders req of
         Nothing -> pure $ Right fd
         Just sid -> do
-            store <- liftIO getStore
+            store <- getStoreFromVault
             sessions <- liftIO $ readTVarIO (storeSessions store)
             case Map.lookup sid sessions of
                 Just sess ->
@@ -163,6 +162,6 @@ setFormLoadTime = do
     case getSessionIdFromHeaders req of
         Nothing -> pure ()
         Just sid -> do
-            store <- liftIO getStore
+            store <- getStoreFromVault
             now <- liftIO getCurrentTime
             Session.setSessionValue store sid "form_load_time" (T.pack (show now))

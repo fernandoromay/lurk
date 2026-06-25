@@ -46,7 +46,6 @@ module Lurk.Prelude
     , withLang
     , ViewCtx
     -- Env
-    , Env
     , getEnv
     , getEnvInt
     , getEnvBool
@@ -90,9 +89,9 @@ import Lurk.Routes (isSubpath, currentPath, trailingSlash, redirect, RouteOption
 import Lurk.Request (preferredLanguages, resolveLanguage, clientIp, ipChain)
 import Lurk.Cookie (getCookie, setCookie, setSimpleCookie, deleteCookie)
 import Lurk.Session (SessionId, Session, sessionId, getSession, getSessionValue, setSessionValue, deleteSessionValue, destroySession)
-import Lurk.CSRF (CsrfToken)
+import Lurk.CSRF (CsrfToken, csrfToken)
 import Lurk.Flash (FlashLevel(..), Flash(..), setFlash, getFlash, flashSuccess, flashError, flashWarning, renderFlash, renderFlashMaybe)
-import Lurk.Env (Env, loadEnv, loadEnvFile, getEnv, getEnvInt, getEnvBool, getEnvWithDefault, requireEnv, hasEnv)
+import Lurk.Env (loadEnv, loadEnvFile, getEnv, getEnvInt, getEnvBool, getEnvWithDefault, requireEnv, hasEnv)
 import Lurk.SEO
 import Lurk.App (LurkApp, runLurk)
 import Lurk.Language (withLang)
@@ -103,21 +102,23 @@ import Prelude
 
 -- | View context: implicit parameters available in views and partials.
 -- The @lang@ type variable allows projects to use their own language type.
-type ViewCtx lang = (?currentPath :: Text, ?params :: [(Text, Text)], ?lang :: lang)
+type ViewCtx lang = (?currentPath :: Text, ?params :: [(Text, Text)], ?lang :: lang, ?csrfToken :: Text)
 
 -- | Look up a value in the request context by key
 contextValue :: (?params :: [(Text, Text)]) => Text -> Maybe Text
 contextValue key = lookup key ?params
 
 -- | Renders LURK Html into a Scotty response
--- Provides @?currentPath@ and @?params@ as implicit parameters.
+-- Provides @?currentPath@, @?params@, and @?csrfToken@ as implicit parameters.
 -- @?lang@ comes from the calling controller's scope (via 'withLang'),
 -- not from this function — it flows directly to views.
-render :: ((?currentPath :: Text, ?params :: [(Text, Text)]) => Html) -> [(Text, Text)] -> Action ()
+render :: ((?currentPath :: Text, ?params :: [(Text, Text)], ?csrfToken :: Text) => Html) -> [(Text, Text)] -> Action ()
 render viewHtml ctx = do
     uri <- currentPath
+    token <- csrfToken
     let ?currentPath = uri
         ?params = ctx
+        ?csrfToken = token
     html . TL.fromStrict . renderHtml $ viewHtml
 
 -- | Catch-all route that automatically sets the HTTP 404 status
