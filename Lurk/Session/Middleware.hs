@@ -9,7 +9,7 @@ import Data.CaseInsensitive qualified as CI
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import Data.Time.Clock (addUTCTime, getCurrentTime)
+import Data.Time.Clock (getCurrentTime)
 import Network.Wai (Middleware, Request(..))
 import Network.Wai qualified as Wai
 import System.Directory (doesFileExist, removeFile)
@@ -34,12 +34,16 @@ sessionMiddleware store app req respond = do
             case Map.lookup sid sessions of
                 Just sess -> do
                     now <- getCurrentTime
-                    if sessionExpiry sess > now
-                        then continueWithSession sid app req respond
-                        else do
+                    if isSessionExpired now sess
+                        then do
                             atomically $ modifyTVar' (storeSessions store) (Map.delete sid)
                             removeSessionFile store sid
                             newSessionAndContinue store app req respond
+                        else do
+                            -- Rolling expiration: refresh idle expiry on every request
+                            let refreshed = refreshIdleExp (storeIdleTimeout store) now sess
+                            atomically $ modifyTVar' (storeSessions store) (Map.insert sid refreshed)
+                            continueWithSession sid app req respond
                 Nothing -> newSessionAndContinue store app req respond
         Nothing -> newSessionAndContinue store app req respond
 
@@ -78,10 +82,12 @@ newSessionAndContinue :: SessionStore -> Middleware
 newSessionAndContinue store app req respond = do
     now <- getCurrentTime
     sid <- newSessionId
+    let (absExp, idleExp) = newSessionExps (storeMaxAge store) (storeIdleTimeout store) now
     let sess = Session
-            { sessionId     = sid
-            , sessionData   = Map.empty
-            , sessionExpiry = addUTCTime (fromIntegral $ storeTTL store) now
+            { sessionId          = sid
+            , sessionData        = Map.empty
+            , sessionAbsoluteExp = absExp
+            , sessionIdleExp     = idleExp
             }
     atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
     isProduction <- (== Just "production") <$> lookupEnv "LURK_ENV"

@@ -69,10 +69,10 @@ testRenderFlashMaybe = testGroup "renderFlashMaybe"
 testFlashSessionIntegration :: TestTree
 testFlashSessionIntegration = testGroup "flash session integration"
     [ testCase "set then read flash keys from session" $ do
-        store <- newSessionStore
+        store <- newSessionStore Nothing Nothing
         sid <- newSessionId
         now <- getCurrentTime
-        let sess = Session { sessionId = sid, sessionData = Map.empty, sessionExpiry = addUTCTime 3600 now }
+        let sess = Session { sessionId = sid, sessionData = Map.empty, sessionAbsoluteExp = Just (addUTCTime 3600 now), sessionIdleExp = Nothing }
         atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
         -- Simulate setFlash: write both keys
         atomically $ modifyTVar' (storeSessions store) $ \m ->
@@ -101,20 +101,20 @@ testFlashSessionIntegration = testGroup "flash session integration"
         assertEqual "level cleared" Nothing (getSessionValue "flash_level" s')
         assertEqual "message cleared" Nothing (getSessionValue "flash_message" s')
     , testCase "no flash keys returns Nothing (simulated)" $ do
-        store <- newSessionStore
+        store <- newSessionStore Nothing Nothing
         sid <- newSessionId
         now <- getCurrentTime
-        let sess = Session { sessionId = sid, sessionData = Map.empty, sessionExpiry = addUTCTime 3600 now }
+        let sess = Session { sessionId = sid, sessionData = Map.empty, sessionAbsoluteExp = Just (addUTCTime 3600 now), sessionIdleExp = Nothing }
         atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
         sess' <- readTVarIO (storeSessions store)
         let Just s = Map.lookup sid sess'
         assertEqual "no level" Nothing (getSessionValue "flash_level" s)
         assertEqual "no message" Nothing (getSessionValue "flash_message" s)
     , testCase "partial flash keys are ignored" $ do
-        store <- newSessionStore
+        store <- newSessionStore Nothing Nothing
         sid <- newSessionId
         now <- getCurrentTime
-        let sess = Session { sessionId = sid, sessionData = Map.singleton "flash_level" "success", sessionExpiry = addUTCTime 3600 now }
+        let sess = Session { sessionId = sid, sessionData = Map.singleton "flash_level" "success", sessionAbsoluteExp = Just (addUTCTime 3600 now), sessionIdleExp = Nothing }
         atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
         sess' <- readTVarIO (storeSessions store)
         let Just s = Map.lookup sid sess'

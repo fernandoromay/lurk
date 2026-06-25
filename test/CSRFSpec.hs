@@ -39,10 +39,10 @@ testTokenGeneration = testGroup "newCsrfToken"
 testTokenStorage :: TestTree
 testTokenStorage = testGroup "setCsrfToken / getCsrfToken"
     [ testCase "set then get returns the same token" $ do
-        store <- newSessionStore
+        store <- newSessionStore Nothing Nothing
         sid <- newSessionId
         now <- getCurrentTime
-        let sess = Session { sessionId = sid, sessionData = Map.empty, sessionExpiry = addUTCTime 3600 now }
+        let sess = Session { sessionId = sid, sessionData = Map.empty, sessionAbsoluteExp = Just (addUTCTime 3600 now), sessionIdleExp = Nothing }
         atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
 
         token <- newCsrfToken
@@ -50,10 +50,10 @@ testTokenStorage = testGroup "setCsrfToken / getCsrfToken"
         retrieved <- getCsrfToken store sid
         assertEqual "should retrieve stored token" token retrieved
     , testCase "getCsrfToken generates token if none exists" $ do
-        store <- newSessionStore
+        store <- newSessionStore Nothing Nothing
         sid <- newSessionId
         now <- getCurrentTime
-        let sess = Session { sessionId = sid, sessionData = Map.empty, sessionExpiry = addUTCTime 3600 now }
+        let sess = Session { sessionId = sid, sessionData = Map.empty, sessionAbsoluteExp = Just (addUTCTime 3600 now), sessionIdleExp = Nothing }
         atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
 
         token <- getCsrfToken store sid
@@ -66,21 +66,21 @@ testTokenStorage = testGroup "setCsrfToken / getCsrfToken"
 testTokenValidation :: TestTree
 testTokenValidation = testGroup "validateCsrfToken"
     [ testCase "valid token returns True" $ do
-        store <- newSessionStore
+        store <- newSessionStore Nothing Nothing
         sid <- newSessionId
         now <- getCurrentTime
         token <- newCsrfToken
-        let sess = Session { sessionId = sid, sessionData = Map.singleton "csrf_token" token, sessionExpiry = addUTCTime 3600 now }
+        let sess = Session { sessionId = sid, sessionData = Map.singleton "csrf_token" token, sessionAbsoluteExp = Just (addUTCTime 3600 now), sessionIdleExp = Nothing }
         assertBool "valid token should pass" (validateCsrfToken sess token)
     , testCase "invalid token returns False" $ do
-        store <- newSessionStore
+        store <- newSessionStore Nothing Nothing
         sid <- newSessionId
         now <- getCurrentTime
         token <- newCsrfToken
-        let sess = Session { sessionId = sid, sessionData = Map.singleton "csrf_token" token, sessionExpiry = addUTCTime 3600 now }
+        let sess = Session { sessionId = sid, sessionData = Map.singleton "csrf_token" token, sessionAbsoluteExp = Just (addUTCTime 3600 now), sessionIdleExp = Nothing }
         assertBool "wrong token should fail" (not $ validateCsrfToken sess "wrong-token")
     , testCase "missing token returns False" $ do
         now <- getCurrentTime
-        let sess = Session { sessionId = "test", sessionData = Map.empty, sessionExpiry = addUTCTime 3600 now }
+        let sess = Session { sessionId = "test", sessionData = Map.empty, sessionAbsoluteExp = Just (addUTCTime 3600 now), sessionIdleExp = Nothing }
         assertBool "missing token should fail" (not $ validateCsrfToken sess "anything")
     ]

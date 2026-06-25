@@ -32,6 +32,7 @@ module Lurk.Prelude
     , deleteCookie
     , notFound
     , module Lurk.SEO
+    , Config(..)
     , LurkApp
     , runLurk
     , routeSettings
@@ -67,7 +68,6 @@ module Lurk.Prelude
     , destroySession
     , newSessionId
     , cleanupSessions
-    , readSessionMaxAge
     -- CSRF
     , CsrfToken
     , newCsrfToken
@@ -102,12 +102,12 @@ import Lurk.QQ (lurk)
 import Lurk.Routes (isSubpath, currentPath, trailingSlash, redirect)
 import Lurk.Request (preferredLanguages, resolveLanguage, clientIp, ipChain)
 import Lurk.Cookie (getCookie, setCookie, setSimpleCookie, deleteCookie)
-import Lurk.Session (SessionId, Session(..), SessionStore, newSessionStore, getSession, getSessionValue, setSessionValue, deleteSessionValue, destroySession, newSessionId, cleanupSessions, readSessionMaxAge)
+import Lurk.Session (SessionId, Session(..), SessionStore(..), newSessionStore, getSession, getSessionValue, setSessionValue, deleteSessionValue, destroySession, newSessionId, cleanupSessions, isSessionExpired, refreshIdleExp, newSessionExps)
 import Lurk.CSRF (CsrfToken, newCsrfToken, getCsrfToken, validateCsrfToken, getSessionIdFromHeaders, cacheFormBody, lookupCachedFormParam, getCachedFormParams)
 import Lurk.Flash (FlashLevel(..), Flash(..), setFlash, getFlash, flashSuccess, flashError, flashWarning, renderFlash, renderFlashMaybe)
 import Lurk.Env (Env, loadEnv, loadEnvFile, getEnv, getEnvInt, getEnvBool, getEnvWithDefault, requireEnv, hasEnv)
 import Lurk.SEO
-import Lurk.App (LurkApp, Action, get, post, getPage, getPages, postAction, postActions, routeSettings, runLurk, RouteOption(..), getStore, getAppEnv)
+import Lurk.App (Config(..), LurkApp, Action, get, post, getPage, getPages, postAction, postActions, routeSettings, runLurk, RouteOption(..), getStore, getAppEnv)
 import Lurk.Language (withLang)
 import Web.Scotty (html, queryParam)
 import Web.Scotty qualified as Scotty

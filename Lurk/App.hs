@@ -1,5 +1,6 @@
 module Lurk.App
-    ( LurkApp
+    ( Config(..)
+    , LurkApp
     , Action
     , RouteOption(..)
     , routeSettings
@@ -31,6 +32,14 @@ import Network.Wai.Middleware.ForceSSL (forceSSL)
 import Network.Wai (Middleware)
 import Web.Scotty (ScottyM, ActionM, middleware, scotty, literal)
 import Web.Scotty qualified as Scotty
+
+-- | Application configuration
+data Config = Config
+    { port          :: Int
+    , domain        :: Text
+    , sessionMaxAge :: Maybe Int
+    , sessionIdle   :: Maybe Int
+    }
 
 -- | Global store reference (set during startup, read by handlers)
 {-# NOINLINE storeRef #-}
@@ -85,15 +94,15 @@ routeSettings = mapM_ apply
     apply ForceSSL           = middleware smartForceSSL
     apply (ServeStatic dir)  = middleware $ staticPolicy (addBase dir)
 
--- Start the Lurk application on the given port
-runLurk :: Int -> LurkApp -> IO ()
-runLurk port app = do
+-- Start the Lurk application
+runLurk :: Config -> LurkApp -> IO ()
+runLurk cfg app = do
     env <- Lurk.Env.loadEnv
     atomically $ writeTVar envRef (Just env)
-    store <- newFileSessionStore ".lurk-sessions"
+    store <- newFileSessionStore (sessionMaxAge cfg) (sessionIdle cfg) ".lurk-sessions"
     atomically $ writeTVar storeRef (Just store)
     _ <- cleanupSessions store
-    scotty port $ do
+    scotty (port cfg) $ do
         middleware (sessionMiddleware store)
         middleware (csrfMiddleware store)
         app

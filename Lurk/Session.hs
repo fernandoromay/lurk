@@ -13,7 +13,9 @@ module Lurk.Session
     , newSessionId
     , cleanupSessions
     , persistSession
-    , readSessionMaxAge
+    , isSessionExpired
+    , refreshIdleExp
+    , newSessionExps
     ) where
 
 import Control.Concurrent (ThreadId, forkIO, threadDelay)
@@ -27,17 +29,16 @@ import Data.CaseInsensitive qualified as CI
 import Data.Foldable (for_)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, isJust)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Time.Clock (UTCTime, addUTCTime, getCurrentTime)
+import Data.Time.Format (formatTime, parseTimeM, defaultTimeLocale)
 import Data.Word (Word8)
 import System.Entropy (getEntropy)
 import System.Directory (doesDirectoryExist, createDirectoryIfMissing, doesFileExist, removeFile, renameFile, listDirectory)
 import System.FilePath ((</>))
-import Text.Read (readMaybe)
-import System.Environment (lookupEnv)
 import Network.Wai (Request(..))
 import Web.Scotty (ActionM, request)
 
@@ -48,47 +49,65 @@ type Action a = ActionM a
 type SessionId = Text
 
 data Session = Session
-    { sessionId     :: SessionId
-    , sessionData   :: Map Text Text
-    , sessionExpiry :: UTCTime
+    { sessionId          :: SessionId
+    , sessionData        :: Map Text Text
+    , sessionAbsoluteExp :: Maybe UTCTime  -- Immutable. Set at creation.
+    , sessionIdleExp     :: Maybe UTCTime  -- Refreshes on access.
     }
 
 data SessionStore
     = InMemoryStore
-        { storeSessions :: TVar (Map SessionId Session)
-        , storeTTL      :: Int
+        { storeSessions    :: TVar (Map SessionId Session)
+        , storeMaxAge      :: Maybe Int
+        , storeIdleTimeout :: Maybe Int
         }
     | FileStore
-        { storeSessions :: TVar (Map SessionId Session)
-        , storeTTL      :: Int
-        , storeDir      :: FilePath
+        { storeSessions    :: TVar (Map SessionId Session)
+        , storeMaxAge      :: Maybe Int
+        , storeIdleTimeout :: Maybe Int
+        , storeDir         :: FilePath
         }
 
--- | Read SESSION_MAX_AGE from the environment (seconds). Defaults to 86400 (24h).
-readSessionMaxAge :: IO Int
-readSessionMaxAge = do
-    mVal <- lookupEnv "SESSION_MAX_AGE"
-    case mVal >>= readMaybe of
-        Just n | n > 0 -> pure n
-        _              -> pure 86400
+-- | Check if a session has expired based on absolute or idle expiry.
+isSessionExpired :: UTCTime -> Session -> Bool
+isSessionExpired now Session{..} =
+    maybe False (<= now) sessionAbsoluteExp
+    || maybe False (<= now) sessionIdleExp
+
+-- | Refresh the idle expiry timestamp. No-op if idle timeout is Nothing.
+refreshIdleExp :: Maybe Int -> UTCTime -> Session -> Session
+refreshIdleExp Nothing _ sess = sess
+refreshIdleExp (Just timeout) now sess =
+    sess { sessionIdleExp = Just (addUTCTime (fromIntegral timeout) now) }
+
+-- | Compute initial absolute and idle expiry times from config.
+newSessionExps :: Maybe Int -> Maybe Int -> UTCTime -> (Maybe UTCTime, Maybe UTCTime)
+newSessionExps mMaxAge mIdle now =
+    let absExp = case mMaxAge of
+            Just age -> Just (addUTCTime (fromIntegral age) now)
+            Nothing  -> case mIdle of
+                Just idle -> Just (addUTCTime (fromIntegral idle) now)
+                Nothing   -> Just (addUTCTime 86400 now)
+        idleExp = (`addUTCTime` now) . fromIntegral <$> mIdle
+    in (absExp, idleExp)
 
 -- | Create a new in-memory session store
-newSessionStore :: IO SessionStore
-newSessionStore = do
-    ttl <- readSessionMaxAge
+newSessionStore :: Maybe Int -> Maybe Int -> IO SessionStore
+newSessionStore mMaxAge mIdle =
     InMemoryStore
         <$> newTVarIO Map.empty
-        <*> pure ttl
+        <*> pure mMaxAge
+        <*> pure mIdle
 
 -- | Create a file-backed session store
-newFileSessionStore :: FilePath -> IO SessionStore
-newFileSessionStore dir = do
+newFileSessionStore :: Maybe Int -> Maybe Int -> FilePath -> IO SessionStore
+newFileSessionStore mMaxAge mIdle dir = do
     createDirectoryIfMissing True dir
     sessions <- loadAllSessions dir
-    ttl <- readSessionMaxAge
     FileStore
         <$> newTVarIO sessions
-        <*> pure ttl
+        <*> pure mMaxAge
+        <*> pure mIdle
         <*> pure dir
 
 -- | Load all session files from disk into a Map
@@ -106,32 +125,36 @@ loadAllSessions dir = do
         isFile <- doesFileExist path
         if not isFile then pure acc else do
             content <- BC.readFile path
-            case parseSessionFile now (T.pack fileName) content of
+            case parseSessionFile (T.pack fileName) content of
                 Just sess
-                    | sessionExpiry sess > now -> pure (Map.insert (sessionId sess) sess acc)
+                    | not (isSessionExpired now sess) -> pure (Map.insert (sessionId sess) sess acc)
                     | otherwise -> do
                         removeFile path  -- clean up expired
                         pure acc
                 Nothing -> pure acc
 
--- | Parse a session file. Format: first line is expiry, rest are key=value
-parseSessionFile :: UTCTime -> SessionId -> BS.ByteString -> Maybe Session
-parseSessionFile _ sid content =
+-- | Parse a session file.
+-- Format: line 1 = absolute expiry (ISO 8601 or empty), line 2 = idle expiry (ISO 8601 or empty), rest = key=value
+parseSessionFile :: SessionId -> BS.ByteString -> Maybe Session
+parseSessionFile sid content =
     case BC.lines content of
-        (expiryLine:kvLines) -> do
-            let expiryStr = TE.decodeUtf8 (BC.strip expiryLine)
-            -- Parse ISO format time: "2024-01-15 10:30:00 UTC"
-            expiry <- parseExpiry (T.unpack expiryStr)
-            let kvs = mapMaybe parseKV kvLines
-            pure Session
-                { sessionId     = sid
-                , sessionData   = Map.fromList kvs
-                , sessionExpiry = expiry
-                }
-        [] -> Nothing
+        (absLine:idleLine:kvLines) -> do
+            let absExp  = parseISO8601 (T.unpack $ TE.decodeUtf8 $ BC.strip absLine)
+                idleExp = parseISO8601 (T.unpack $ TE.decodeUtf8 $ BC.strip idleLine)
+                kvs     = mapMaybe parseKV kvLines
+            if isJust absExp || isJust idleExp
+                then Just Session
+                    { sessionId          = sid
+                    , sessionData        = Map.fromList kvs
+                    , sessionAbsoluteExp = absExp
+                    , sessionIdleExp     = idleExp
+                    }
+                else Nothing
+        _ -> Nothing
 
-parseExpiry :: String -> Maybe UTCTime
-parseExpiry = readMaybe
+parseISO8601 :: String -> Maybe UTCTime
+parseISO8601 "" = Nothing
+parseISO8601 s  = parseTimeM False defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" s
 
 parseKV :: BS.ByteString -> Maybe (Text, Text)
 parseKV line
@@ -159,6 +182,7 @@ toHexByte b = BS.pack [hexChar hi, hexChar lo]
 
 -- | Get session from request. Uses X-Lurk-Session-Id header (set by session middleware).
 -- Falls back to creating a new session if header is missing.
+-- Refreshes idle expiry on access when storeIdleTimeout is set.
 getSession :: SessionStore -> Action Session
 getSession store = do
     req <- request
@@ -168,9 +192,12 @@ getSession store = do
             case Map.lookup sid sessions of
                 Just sess -> do
                     now <- liftIO getCurrentTime
-                    if sessionExpiry sess > now
-                        then pure sess
-                        else newSession store
+                    if isSessionExpired now sess
+                        then newSession store
+                        else do
+                            let refreshed = refreshIdleExp (storeIdleTimeout store) now sess
+                            liftIO $ atomically $ modifyTVar' (storeSessions store) (Map.insert sid refreshed)
+                            pure refreshed
                 Nothing -> newSession store
         Nothing -> newSession store
 
@@ -179,10 +206,12 @@ newSession :: SessionStore -> Action Session
 newSession store = do
     now <- liftIO getCurrentTime
     sid <- liftIO newSessionId
+    let (absExp, idleExp) = newSessionExps (storeMaxAge store) (storeIdleTimeout store) now
     let sess = Session
-            { sessionId     = sid
-            , sessionData   = Map.empty
-            , sessionExpiry = addUTCTime (fromIntegral $ storeTTL store) now
+            { sessionId          = sid
+            , sessionData        = Map.empty
+            , sessionAbsoluteExp = absExp
+            , sessionIdleExp     = idleExp
             }
     liftIO $ atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
     pure sess
@@ -235,11 +264,14 @@ persistSession InMemoryStore{} _ = pure ()
 persistSession FileStore{..} Session{..}
     | not (T.all (`elem` ("0123456789abcdef" :: String)) sessionId) = pure ()
     | otherwise = do
-        let path = storeDir </> T.unpack sessionId
-        let tmpPath = path ++ ".tmp"
-        let expiryLine = show sessionExpiry
-        let kvLines = map (\(k, v) -> TE.encodeUtf8 k <> "=" <> TE.encodeUtf8 v) $ Map.toList sessionData
-        let content = BC.pack expiryLine <> "\n" <> BC.intercalate "\n" kvLines <> "\n"
+        let path     = storeDir </> T.unpack sessionId
+        let tmpPath  = path ++ ".tmp"
+        let fmt      = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ"
+        let absLine  = maybe "" fmt sessionAbsoluteExp
+        let idleLine = maybe "" fmt sessionIdleExp
+        let kvLines  = map (\(k, v) -> TE.encodeUtf8 k <> "=" <> TE.encodeUtf8 v) $ Map.toList sessionData
+        let content  = BC.pack absLine <> "\n" <> BC.pack idleLine <> "\n"
+                    <> BC.intercalate "\n" kvLines <> "\n"
         BS.writeFile tmpPath content
         renameFile tmpPath path
 
@@ -251,8 +283,8 @@ cleanupSessions store = forkIO $ forever $ do
     now <- getCurrentTime
     expired <- atomically $ do
         sessions <- readTVar (storeSessions store)
-        let expired = Map.filter (\sess -> sessionExpiry sess <= now) sessions
-        writeTVar (storeSessions store) (Map.filter (\sess -> sessionExpiry sess > now) sessions)
+        let expired = Map.filter (isSessionExpired now) sessions
+        writeTVar (storeSessions store) (Map.filter (not . isSessionExpired now) sessions)
         pure expired
     -- Remove expired session files from disk
     case store of
