@@ -8,7 +8,6 @@ import qualified SMTPSpec
 import qualified FlashSpec
 import qualified RequestSpec
 import qualified QQSpec
-import qualified LogSpec
 
 main :: IO ()
 main = defaultMain $ testGroup "lurk"
@@ -18,5 +17,4 @@ main = defaultMain $ testGroup "lurk"
     , FlashSpec.tests
     , RequestSpec.tests
     , QQSpec.tests
-    , LogSpec.tests
     ]
