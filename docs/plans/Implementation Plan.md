@@ -1,4 +1,4 @@
-# Implementation Plan
+# Important Fixes
 
 ## Prioritization Dimensions
 
@@ -13,20 +13,20 @@
                         EASY                    HARD
               ┌─────────────────────┬─────────────────────┐
               │                     │                     │
-    HIGH      │  1. Session UTCTime │  3. Global State    │
-    LOCKING   │  2. Idle Timeout    │  4. Config System   │
+    HIGH      │                     │  1. Global State    │
+    LOCKING   │                     │                     │
               │                     │                     │
               ├─────────────────────┼─────────────────────┤
               │                     │                     │
-    LOW       │  5. Log Append      │  7. Lurk.Auth       │
-    LOCKING   │  6. SMTP Cert       │  8. Lang Detection  │
+    LOW       │  Log Improvements   │  3. Lurk.Auth       │
+    LOCKING   │  2. SMTP Cert       │  4. Lang Detection  │
               │                     │                     │
               └─────────────────────┴─────────────────────┘
 ```
 
 ## Items
 
-### 3. Global State
+### 1. Global State
 **Locking:** HIGH — scalability, multi-server deployments
 **Easiness:** HARD — architectural redesign
 
@@ -42,19 +42,7 @@
 
 ---
 
-### 5. Log Append
-**Locking:** LOW — standalone
-**Easiness:** EASY — change one function
-
-**Problem:** `writeLog` creates `.tmp` file, writes one entry, renames to target. Overwrites entire log file each time — only last entry survives.
-
-**Fix:** Read existing content, append new entry, write back. Or use `appendFile` / `openFile AppendMode`.
-
-**Files:** `Lurk/Log.hs` (lines 52-64)
-
----
-
-### 6. SMTP Certificate Validation
+### 2. SMTP Certificate Validation
 **Locking:** LOW — standalone
 **Easiness:** EASY — change one boolean
 
@@ -66,7 +54,7 @@
 
 ---
 
-### 7. Lurk.Auth
+### 3. Lurk.Auth
 **Locking:** LOW — standalone feature
 **Easiness:** MEDIUM — builds on existing sessions
 
@@ -81,19 +69,18 @@ requireAuth  :: SessionStore -> Action User
 requireRole  :: SessionStore -> Role -> Action User
 ```
 
-**Depends on:** #1 (Session UTCTime), #2 (Idle Timeout), #4 (Config)
-
 **Files:** New `Lurk/Auth.hs`
 
 ---
 
-### 8. Language Detection & Fallback
+### 4. Language Detection & Fallback
 **Locking:** LOW — standalone feature
 **Easiness:** MEDIUM — detection logic
 
 **Problem:** No automatic language detection. Users must use language-specific paths.
 
 **Fix:** Detection priority:
+
 1. Cookie/session (saved preference)
 2. `Accept-Language` header
 3. Default fallback (first enum value)
@@ -102,20 +89,5 @@ requireRole  :: SessionStore -> Role -> Action User
 detectLanguage :: (Enum lang, Bounded lang) => [lang] -> Action lang
 ```
 
-**Depends on:** #1 (Session UTCTime), #2 (Idle Timeout)
-
 **Files:** New `Lurk/Language/Detect.hs`
 
----
-
-## Dependency Graph
-
-```
-#1 Session UTCTime ──┐
-                     ├─→ #7 Lurk.Auth
-#2 Idle Timeout ─────┤
-                     ├─→ #8 Language Detection
-#4 Config System ────┘
-```
-
-Items #3, #5, #6 are independent.
