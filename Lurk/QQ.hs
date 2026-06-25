@@ -6,7 +6,7 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 import Data.Void
 import qualified Data.Text as T
-import Data.Char (isSpace)
+import Data.Char (isAlpha, isSpace)
 import Data.List (isPrefixOf)
 import Language.Haskell.Meta.Parse (parseExp)
 import Data.Text (Text)
@@ -55,6 +55,8 @@ parser = many (try haskellExp <|> literal) <* eof
         return (LocatedChunk offset (HaskellExp code))
 
     -- | Read Haskell code inside {{ }}, tracking brace depth and lurk nesting.
+    -- String and character literals are consumed intact so that braces inside
+    -- them don't corrupt depth tracking, e.g. {{assetPath "css/{file}.css"}}.
     bracedExpr :: Int -> Parser String
     bracedExpr 0 = return ""
     bracedExpr depth = do
@@ -68,6 +70,12 @@ parser = many (try haskellExp <|> literal) <* eof
                         _ <- char '}'
                         bracedExpr (depth - 1)
                     else (c:) <$> bracedExpr depth
+            '"' -> do
+                str <- lexString
+                (str ++) <$> bracedExpr depth
+            '\'' -> do
+                ch <- lexChar
+                (ch ++) <$> bracedExpr depth
             '[' -> do
                 isLurk <- option False (try (lookAhead (string "lurk|") >> return True))
                 if isLurk
@@ -86,6 +94,34 @@ parser = many (try haskellExp <|> literal) <* eof
                     else (c:) <$> bracedExpr depth
             '\n' -> (c:) <$> bracedExpr depth
             _    -> (c:) <$> bracedExpr depth
+
+    -- | Consume body of a string literal (opening '"' already consumed by caller).
+    lexString :: Parser String
+    lexString = do
+        body <- lexStringBody
+        return ('"' : body)
+
+    lexStringBody :: Parser String
+    lexStringBody = do
+        c <- anySingle
+        case c of
+            '"'  -> return "\""
+            '\\' -> do
+                esc <- anySingle
+                rest <- lexStringBody
+                return ('\\' : esc : rest)
+            _ -> (c:) <$> lexStringBody
+
+    -- | Consume body of a character literal (opening '\'' already consumed by caller).
+    lexChar :: Parser String
+    lexChar = do
+        c <- anySingle
+        case c of
+            '\\' -> do
+                esc <- anySingle
+                _ <- char '\''
+                return ('\\' : esc : "'")
+            _ -> return ('\'' : c : "'")
 
     -- | Skip content inside (lurk|...|), tracking nested lurk depth.
     lurkSkip :: Int -> Parser String
@@ -151,8 +187,9 @@ parser = many (try haskellExp <|> literal) <* eof
 
     literal = do
         offset <- getOffset
-        text <- takeWhile1P (Just "Literal text") (\c -> c /= '{')
-        return (LocatedChunk offset (Literal text))
+        c <- anySingle
+        text <- takeWhileP (Just "Literal text") (\c' -> c' /= '{')
+        return (LocatedChunk offset (Literal (c : text)))
 
 extractDotChain :: Exp -> Maybe [String]
 extractDotChain (VarE n) = Just [nameBase n]
@@ -202,12 +239,19 @@ transformExp (VarE n)
     | "__implicit_" `isPrefixOf` nameBase n = ImplicitParamVarE (drop 11 (nameBase n))
 transformExp e = e
 
+-- | Replace @?var@ with @__implicit_var@, but only when @?@ starts an identifier.
+-- Question marks inside string literals or followed by non-identifier characters
+-- are left untouched.
+replaceImplicitParams :: String -> String
+replaceImplicitParams [] = []
+replaceImplicitParams ('?':c:rest)
+    | isAlpha c || c == '_' = "__implicit_" ++ replaceImplicitParams (c : rest)
+replaceImplicitParams (c:rest) = c : replaceImplicitParams rest
+
 parseSimpleCode :: String -> String -> Int -> Q Exp
 parseSimpleCode templateStr code offset = do
     let (cleanCode, lurks) = extractInnerLurks code
-        preprocessed = T.unpack
-          . T.replace "?" "__implicit_"
-          $ T.pack cleanCode
+        preprocessed = replaceImplicitParams cleanCode
     case parseExp preprocessed of
         Right exp -> replaceInnerLurks lurks (transformExp exp)
         Left err -> fail $ "LURK parse error in {{ }} block at " ++ formatLocation templateStr offset
