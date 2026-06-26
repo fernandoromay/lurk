@@ -1,29 +1,18 @@
 # Lurk Framework — Roadmap
 
-## Prioritization Dimensions
-
-| Dimension | What it means |
-|-----------|---------------|
-| **Blocking** | Does this block other improvements? High = many features depend on it |
-| **Easiness** | How hard to implement? Easy = hours, Medium = days, Hard = weeks |
-
-Items are sorted by: High blocking + Easy first, then High blocking + Hard, then Low blocking + Easy, then Low blocking + Hard.
-
----
-
 ## Checklist
 
 ### Security & Robustness
 - [x] SMTP certificate validation — disable flag on by default (`Lurk/Email/SMTP.hs:64`)
 - [x] Log append — `writeLog` overwrites file, only last entry survives (`Lurk/Log.hs`)
-- [ ] Log per-path mutex — concurrent writes to same file lose entries (`Lurk/Log.hs`)
+- [x] Log per-path mutex — concurrent writes to same file lose entries (`Lurk/Log.hs`)
 - [x] HTTP security headers — no X-Content-Type-Options, X-Frame-Options, etc. (`ServeStatic` middleware)
 - [x] Default error views — `error404View` / `error500View` in `Lurk.Error`
-- [ ] CSRF form body cache leak — orphaned entry on 403 path (`Lurk/CSRF.hs`)
+- [x] CSRF form body cache leak — orphaned entry on 403 path (`Lurk/CSRF.hs`)
 - [x] XSS escaping — `toHtml` now escapes HTML entities
 
 ### Architecture
-- [ ] Global state redesign — `unsafePerformIO` → `ReaderT AppCtx` (`Lurk/App.hs`, `Lurk/CSRF.hs`, `Lurk/Log.hs`)
+- [x] Clean up `formBodyCache` leak (minor — bounded caches, no security impact)
 
 ### DX & Scaffolding
 - [ ] `lurk add page [name]` — scaffold locale + view + controller + paths (designed in `scaffolding.md`)
@@ -32,8 +21,8 @@ Items are sorted by: High blocking + Easy first, then High blocking + Hard, then
 - [ ] `lurk add legal [name]` — scaffold legal content page (designed in `scaffolding.md`)
 
 ### Logging
-- [ ] Log minimum level filtering — `LogLevel` in `Config`, `newLogger` filtering (designed in `log-improvements.md`)
-- [ ] Export `LogLevel(..)` — currently not exported
+- [x] Log minimum level filtering — `LogLevel` in `Config`, `newLogger` filtering
+- [x] Export `LogLevel(..)`
 
 ### Features
 - [ ] Language Detection & Fallback — cookie → Accept-Language → default (designed in `important-fixes.md`)
@@ -71,30 +60,8 @@ Items are sorted by: High blocking + Easy first, then High blocking + Hard, then
 - [ ] CHANGELOG.md — fill before v1 release
 - [ ] Update `LURK Analysis.md` — remove completed items, add new gaps
 - [ ] Update `IDEAS.md` — correct `Lurk.Cloudflare` status (Turnstile still pending)
-- [ ] Update `README.md` — add `Lurk.Log`, `Lurk.Cloudflare` to feature list
+- [x] Update `README.md` — add `Lurk.Log`, `Lurk.Cloudflare` to feature list
 - [ ] Update `LURK_CLI.md` — add `lurk add` commands
-
----
-
-## Priority Matrix
-
-```
-                        EASY                    HARD
-              ┌─────────────────────┬─────────────────────┐
-              │                     │                     │
-    HIGH      │  1. SMTP Cert       │  3. Global State    │
-    BLOCKING  │  2. Log Append      │     Redesign        │
-              │                     │                     │
-              ├─────────────────────┼─────────────────────┤
-              │                     │                     │
-    LOW       │  4. Security Hdrs   │  6. Lurk.Auth       │
-    BLOCKING  │  5. Error Views     │  7. Language Detect │
-              │  5b. Log Mutex      │  8. Lurk.DB         │
-              │  5c. Log Level      │  9. Lurk.Cache      │
-              │  5d. CHANGELOG      │ 10. Scaffolding     │
-              │  5e. CSRF Cache     │                     │
-              └─────────────────────┴─────────────────────┘
-```
 
 ---
 
@@ -124,29 +91,7 @@ Items are sorted by: High blocking + Easy first, then High blocking + Hard, then
 
 ---
 
-### 3. Global State Redesign
-**Blocking:** HIGH — blocks multi-server deployments, testing, scalability  
-**Easiness:** HARD — architectural redesign across multiple modules
-
-**Problem:** `unsafePerformIO` global TVar refs in:
-- `Lurk.App` — `storeRef`, `envRef`
-- `Lurk.CSRF` — `formBodyCache`
-- `Lurk.Log` — `lockMap`
-
-Single-server only. Not safe for multiple instances. Hard to test.
-
-**Fix:** Thread `SessionStore` and `Env` through the app explicitly:
-- `LurkApp` becomes `ReaderT AppCtx (ScottyM ())`
-- `Action` becomes `ReaderT AppCtx (ActionM ())`
-- `AppCtx` record holds `SessionStore`, `Env`, etc.
-
-**Files:** `Lurk/App.hs`, `Lurk/CSRF.hs`, `Lurk/Log.hs`, all modules using `getStore`/`getAppEnv`
-
-**Note:** This is the hardest architectural change. Consider doing incrementally — start with one module, prove the pattern, then migrate others.
-
----
-
-### ~~4. HTTP Security Headers~~ DONE
+### ~~3. HTTP Security Headers~~ DONE
 **Blocking:** LOW — standalone middleware  
 **Easiness:** EASY — add middleware to `ServeStatic` or new `SecurityHeaders` middleware
 
@@ -164,7 +109,7 @@ Single-server only. Not safe for multiple instances. Hard to test.
 
 ---
 
-### ~~5. Default Error Views~~ DONE
+### ~~4. Default Error Views~~ DONE
 **Blocking:** LOW — standalone  
 **Easiness:** EASY — hardcoded English strings
 
@@ -176,47 +121,43 @@ Single-server only. Not safe for multiple instances. Hard to test.
 
 ---
 
-### 5b. Log Per-Path Mutex
-**Blocking:** LOW — standalone  
-**Easiness:** EASY — MVar-based locking
+### ~~4b. Log Per-Path Mutex~~ DONE
+**Blocking:** LOW — standalone
+**Easiness:** EASY
 
 **Problem:** Two concurrent `writeLog` calls to the same file read the same existing content, then both write — one entry lost.
 
-**Fix:** Per-file-path `MVar` mutex using a global `TVar (Map FilePath (MVar ()))`. Blocks concurrent threads writing to the same file.
+**Fix:** Per-file-path `MVar` mutex using a global `TVar (Map FilePath (MVar ()))`. Implemented in `Lurk/Log.hs`. Concurrent write test added to `test/LogSpec.hs`.
 
-**Files:** `Lurk/Log.hs`
-
-**Design:** Fully designed in `docs/plans/log-improvements.md:19-121`. Implementation ready.
+**Files:** `Lurk/Log.hs`, `test/LogSpec.hs`
 
 ---
 
-### 5c. Log Minimum Level Filtering
+### ~~4c. Log Minimum Level Filtering~~ DONE
 **Blocking:** LOW — standalone  
-**Easiness:** EASY — add field to `Logger`, filter at construction
+**Easiness:** EASY — add field to `Config`, filter at construction
 
 **Problem:** No way to suppress debug/info in production. All levels always write.
 
-**Fix:** Add `minLogLevel :: LogLevel` to `Config`. Thread it through via global `logLevelRef` TVar. `newLogger` reads it and skips writes for levels below threshold.
+**Fix:** Added `minLogLevel :: LogLevel` to `Config`. `runLurk` writes `LURK_LOG_LEVEL` to OS env. `newLogger` reads it via `Env.getEnvWithDefault` and filters at construction time.
 
-**Files:** `Lurk/Log.hs`, `Lurk/App.hs`, `Lurk/Prelude.hs`, `Main.hs`
-
-**Design:** Fully designed in `docs/plans/log-improvements.md:127-297`. Implementation ready.
+**Files:** `Lurk/Log.hs`, `Lurk/App.hs`, `test/LogSpec.hs`
 
 ---
 
-### 5d. CSRF Form Body Cache Leak
+### ~~4d. CSRF Form Body Cache Leak~~ DONE
 **Blocking:** LOW — robustness, not security
-**Easiness:** EASY — add cleanup on 403 path
+**Easiness:** EASY
 
 **Problem:** `formBodyCache` in `Lurk/CSRF.hs` caches form body before validation. Normal path (`getCachedFormParams` in `Lurk/Form.hs`) removes entry. But CSRF failure (403) or abort before `validateForm` leaves orphaned entry in unbounded TVar.
 
-**Fix:** Add `cleanupFormBody` call in the CSRF failure path (line 147 of `CSRF.hs`).
+**Fix:** Moved `cacheFormBody` into the success branch so entries are never inserted when validation fails.
 
-**Files:** `Lurk/CSRF.hs`
+**Files:** `Lurk/CSRF.hs`, `test/CSRFSpec.hs`
 
 ---
 
-### 6. Language Detection & Fallback
+### 5. Language Detection & Fallback
 **Blocking:** LOW — standalone feature  
 **Easiness:** MEDIUM — detection logic
 
@@ -237,7 +178,7 @@ detectLanguage :: (Enum lang, Bounded lang) => [lang] -> Action lang
 
 ---
 
-### 7. `Lurk.Auth`
+### 6. `Lurk.Auth`
 **Blocking:** LOW — standalone feature. Not every app needs auth (marketing sites, blogs, APIs with external auth don't).  
 **Easiness:** MEDIUM — builds on existing sessions
 
@@ -258,7 +199,7 @@ requireRole  :: SessionStore -> Role -> Action User
 
 ---
 
-### 8. `Lurk.Cache`
+### 7. `Lurk.Cache`
 **Blocking:** LOW — standalone feature  
 **Easiness:** MEDIUM — TVar-based in-memory cache
 
@@ -278,7 +219,7 @@ cacheOr     :: CacheStore -> Text -> Int -> IO a -> IO a
 
 ---
 
-### 9. Scaffolding (`lurk add`)
+### 8. Scaffolding (`lurk add`)
 **Blocking:** LOW — DX improvement  
 **Easiness:** MEDIUM — CLI code generation, file injection
 
@@ -292,7 +233,7 @@ cacheOr     :: CacheStore -> Text -> Int -> IO a -> IO a
 
 ---
 
-### 10. `Lurk.DB`
+### 9. `Lurk.DB`
 **Blocking:** LOW — but massive gap vs competitors  
 **Easiness:** HARD — quarters of work
 
@@ -303,6 +244,39 @@ cacheOr     :: CacheStore -> Text -> Int -> IO a -> IO a
 **Files:** New `Lurk/DB.hs`
 
 **Design:** Already described in `docs/IDEAS.md:387-399`.
+
+---
+
+## Implementation Order (Recommended)
+
+### Phase 1: Security & Robustness (v1 blockers)
+1. ~~SMTP certificate validation~~
+2. ~~Log append fix~~
+3. ~~Log per-path mutex~~
+4. ~~CSRF form body cache cleanup~~
+5. ~~HTTP security headers~~
+6. ~~Default error views~~
+
+### Phase 2: DX & Scaffolding
+7. `lurk add page`
+8. `lurk add form`
+9. `lurk add email` (optional)
+
+### Phase 3: Logging Improvements
+10. ~~Export `LogLevel`~~
+11. ~~Log minimum level filtering~~
+12. ~~Logger global via OS env~~
+
+### Phase 4: Features
+13. Language Detection & Fallback
+14. `Lurk.Auth`
+15. Rate limiting
+16. `Lurk.Cache`
+17. `Lurk.Validate`
+18. CHANGELOG.md
+
+### Phase 5: Database (long-term)
+20. `Lurk.DB`
 
 ---
 
@@ -330,51 +304,13 @@ cacheOr     :: CacheStore -> Text -> Int -> IO a -> IO a
 
 ---
 
-## Implementation Order (Recommended)
-
-### Phase 1: Security & Robustness (v1 blockers)
-1. ~~SMTP certificate validation~~
-2. ~~Log append fix~~
-3. Log per-path mutex
-4. CSRF form body cache cleanup
-5. ~~HTTP security headers~~
-6. ~~Default error views~~
-
-### Phase 2: DX & Scaffolding
-7. `lurk add page`
-8. `lurk add form`
-9. `lurk add email` (optional)
-
-### Phase 3: Logging Improvements
-10. Export `LogLevel`
-11. Log minimum level filtering
-12. Logger global via `logLevelRef`
-
-### Phase 4: Features
-13. Language Detection & Fallback
-14. `Lurk.Auth`
-15. Rate limiting
-16. `Lurk.Cache`
-17. `Lurk.Validate`
-18. CHANGELOG.md
-
-### Phase 5: Architecture (optional, for multi-server)
-19. Global state redesign (`ReaderT AppCtx`)
-
-### Phase 6: Database (long-term)
-20. `Lurk.DB`
-
----
-
 ## References
 
 | Document | Status | Relevance |
 |----------|--------|-----------|
 | `docs/LURK Analysis.md` | Needs update | 95% accurate, mark completed items |
 | `docs/IDEAS.md` | Needs update | Correct Cloudflare status (Turnstile pending) |
-| `docs/plans/log-improvements.md` | Ready to implement | Design complete, code ready |
+| `docs/deferred-ideas.md` | New | Global state redesign, lockMap cleanup, locale modules, Page/Route ADT |
 | `docs/plans/scaffolding.md` | Ready to implement | Design complete, code ready |
-| `docs/plans/important-fixes.md` | Partially done | SMTP #2 (open), Auth #3 (open), Global State #1 (open) |
-| `docs/plans/session.md` | DONE | Fully implemented |
-| `README.md` | Needs update | Missing Lurk.Log, Lurk.Cloudflare |
+| `README.md` | Updated | Lurk.Log, Cloudflare documented |
 | `LURK_CLI.md` | Needs update | Missing `lurk add` commands |

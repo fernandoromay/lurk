@@ -2,16 +2,6 @@
 
 ---
 
-## Easy (days)
-
-### Default Error Views
-
-Ship `error404View` and `error500View` in a `Lurk.View` module. Hardcoded
-English strings. Projects that want custom branding override by defining
-their own.
-
----
-
 ## Medium (weeks)
 
 ### `Lurk.Opaque` — Bot-Proof Content
@@ -138,13 +128,6 @@ Generates `View/ViewName.hs`, `Locales/ViewName.hs`, creates or updates
 
 Also: `lurk create view`, `lurk create controller`, `lurk create locale`.
 
-### Page / Route ADT
-
-Type-safe route ADT (`data Page = Home | Pricing | ...`) with compile-time
-exhaustiveness checking and auto-generated localized path helpers.
-
-> Differed due to incompatibility with Lurk's philosophy of previous propositions.
-
 ### Path Parameters (CMS Phase)
 
 Dynamic URL segments for content-driven pages:
@@ -181,7 +164,7 @@ getPagesWith [rateLimited 100] allPages apiPath apiAction
 Needed for: admin dashboards, API endpoints, any protected content.
 Could also support route groups: `routeGroup [authRequired] $ do ...`
 
-### `Lurk.i18n` — Enhanced Internationalization
+### `Lurk.Localization` — Enhanced Internationalization
 
 Date formatting, currency formatting:
 
@@ -190,14 +173,16 @@ formatDate :: Language -> UTCTime -> Text
 formatCurrency :: Language -> Currency -> Text
 ```
 
-### `Lurk.i18n` — Pluralization
+### `Lurk.Localization` — Pluralization
 
 Explicit, type-safe pluralization. No complex rules — the programmer defines the forms, the framework picks the right one:
 
 ```haskell
 data PluralForm = Singular | Plural | Dual | Paucal
+    deriving (Eq, Ord, Show)
 
 newtype Pluralizable = Pluralizable (Map PluralForm Text)
+    deriving (Eq, Show)
 
 singular :: Text -> Pluralizable
 plural   :: Text -> Pluralizable
@@ -329,44 +314,6 @@ adminRouter = do
     get "/" adminHomeAction  -- ?lang fixed to EN (or user preference)
 ```
 
-Different language types (`Language` vs `BlogLanguage` vs fixed `EN`), different path functions, different resolution strategies — all independent.
-
-**Alternative: Shared content across languages** — When all subdomains serve the same content in different languages, use `Router/` with one file per language:
-
-```
-├── Router.hs          # Dispatches based on domain/subdomain
-├── Router/
-│   ├── EN.hs          # English routes
-│   ├── ES.hs          # Spanish routes
-│   └── KO.hs          # Korean routes
-```
-
-```haskell
--- Router.hs
-router :: LurkApp
-router = do
-    domainRouter $ \case
-        "es"    -> ES.router
-        "ko"    -> KO.router
-        _       -> EN.router
-
--- Router/EN.hs
-router :: LurkApp
-router = do
-    get "/" homeActionEN
-    get "/pricing/" pricingActionEN
-    ...
-
--- Router/ES.hs
-router :: LurkApp
-router = do
-    get "/" homeActionES
-    get "/precios/" pricingActionES
-    ...
-```
-
-Each language router is independent — different paths, different views, different locale files. The root router just dispatches.
-
 ---
 
 ## Very Hard (quarters)
@@ -395,35 +342,6 @@ No Virtual DOM overhead. Faster than Next.js.
 
 Reflect on `Locales/` and `Controller/` types to auto-generate a secure
 admin dashboard. Surpass Laravel's Filament.
-
----
-
-## Optional
-
-### Locale modules — For pointfree views
-
-Currently, locale functions are explicit (`locale :: Language -> SomeLocale`). Views call them as `Home.locale ?lang`. This works but prevents pointfree style in views.
-
-To enable `homeView (Home.locale)` in pointfree style, locale functions need `?lang`:
-
-```haskell
--- Before:
-locale :: Language -> HomeLocale
-locale EN = HomeLocale {..}
-locale ES = HomeLocale {..}
-locale KO = HomeLocale {..}
-
--- After:
-locale :: (?lang :: Language) => HomeLocale
-locale = case ?lang of
-    EN -> HomeLocale {..}
-    ES -> HomeLocale {..}
-    KO -> HomeLocale {..}
-```
-
-**Tradeoff:** This changes 33 locale functions. The benefit is purely aesthetic (pointfree style). The locale layer becomes coupled to the implicit params mechanism.
-
-**Recommendation:** Skip this phase. Keep locale explicit. The 1 `?lang` mention per controller body (`Home.locale ?lang`) is acceptable.
 
 ---
 

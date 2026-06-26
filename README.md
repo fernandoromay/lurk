@@ -16,7 +16,7 @@ Lurk compiles your entire application—including HTML templates and multi-langu
 - **`Lurk.Email.SMTP`** — Self-contained SMTP client (STARTTLS/SMTPS). Zero external email library dependencies.
 - **`Lurk.Routes.Security`** — HTTP security headers middleware (X-Content-Type-Options, X-Frame-Options, HSTS, etc.). Merge API for overrides.
 - **`Lurk.Error`** — Default 404/500 error views (self-contained HTML). Exception middleware catches unhandled errors automatically.
-- **`Lurk.Log`** — Structured JSON logging with `Logger` record, per-level helpers, and file output.
+- **`Lurk.Log`** — Structured JSON logging with `Logger` record, per-level helpers, file output, and configurable minimum log level.
 - **Environment** — Direct OS environment access via `getEnv`/`requireEnv`/`hasEnv`. Reads `.env` at startup with `loadEnv`.
 - **Deployment** — `lurk deploy` builds a binary and deploys it via SSH, Docker, or custom shell scripts.
 - **Static assets** — `mkAssetPath` for fingerprinted asset URLs.
@@ -37,7 +37,7 @@ lib/lurk/
 │   ├── Request.hs        # Request helpers (params, headers, cookies)
 │   ├── Cloudflare.hs     # Typed Cloudflare headers (country, bot score, etc.)
 │   ├── Env.hs            # loadEnv, getEnv, requireEnv
-│   ├── Log.hs            # Structured JSON logging (Logger, LogLevel, file output)
+│   ├── Log.hs            # Structured JSON logging (LogLevel, Logger, level filtering)
 │   ├── Session.hs        # File-backed session store (TVar) with destroySession
 │   ├── Session/
 │   │   └── Middleware.hs  # WAI middleware for session handling (Secure flag, eager expiry)
@@ -86,6 +86,7 @@ build-depends: lurk
 module Router where
 
 import Lurk.Prelude
+import Lurk.App
 
 router :: LurkApp
 router = do
@@ -144,8 +145,8 @@ Lurk expects `.env` in the project root. Load it in `Main.hs`:
 ```haskell
 module Main where
 
-import Lurk.Prelude
-import Lurk.App (Config(..))
+import Lurk.App
+import Lurk.Env (loadEnv)
 import Paths qualified as P (domain)
 import Router (router)
 
@@ -156,6 +157,7 @@ loadConfig = do
         , domain        = P.domain
         , sessionMaxAge = Nothing
         , sessionIdle   = Nothing
+        , minLogLevel   = LevelInfo
         }
 
 main :: IO ()

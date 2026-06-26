@@ -31,8 +31,8 @@
 |-----------------------|-------------------|-------------------|-------------------|-------------------|-------------------|
 | Language              | Haskell           | PHP               | TypeScript        | Python            | Ruby              |
 | Type safety           | Compile-time      | Runtime           | Compile-time (TS) | Runtime           | Runtime           |
-| Template syntax       | `[lurk\|...\|]` QQ | Blade `{{ }}`     | JSX `{}`          | Jinja `{{ }}`     | ERB `<%= %>`      |
-| Template control flow | `@if`/`@forEach`  | `@if`/`@foreach`  | `{condition && }` | `{% if %}`        | `<% if %>`        |
+| Template syntax       | `[lurk\|...\|]` + `{{ }}` | Blade `{{ }}`     | JSX `{}`          | Jinja `{{ }}`     | ERB `<%= %>`      |
+| Template control flow | `{{forEach` / `if` / `case}}` | `@if`/`@foreach`  | `{condition && }` | `{% if %}`        | `<% if %>`        |
 | Component model       | Native functions  | Blade components  | React components  | Template inheritance | Partials       |
 | Variable interpolation| `{{expr}}`        | `{{ $var }}`      | `{var}`           | `{{ var }}`       | `<%= var %>`      |
 | CSS/JS in templates   | Just works        | Just works        | Just works        | Just works        | Just works        |
@@ -41,30 +41,30 @@
 
 | Feature            | Lurk              | Laravel                  | Next.js                  | Django         | Rails                  |
 |--------------------|-------------------|--------------------------|--------------------------|----------------|------------------------|
-| Config system      | `Lurk.Env`        | `config/*.php` + `.env`  | `next.config.js` + `.env`| `settings.py`  | `config/` + `.env`     |
+| Config system      | `Config` + `.env` | `config/*.php` + `.env`  | `next.config.js` + `.env`| `settings.py`  | `config/` + `.env`     |
 | Env loading        | `.env` + process  | `.env` + `config()`      | `.env.local`             | `os.environ`   | `.env` + `credentials` |
-| Type-safe config   | `getEnv`/`requireEnv` (IO, no record) | Runtime `config()`    | Runtime `process.env`    | Runtime `os.getenv` | Runtime `ENV[]`    |
+| Type-safe config   | Compile-time `loadConfig` | Runtime `config()`    | Runtime `process.env`    | Runtime `os.getenv` | Runtime `ENV[]`    |
 | Secrets management | `.env` file       | `.env` + Vault           | Varies by hosting        | `secrets.py`   | `credentials.yml`      |
 
 ### Routing
 
 | Feature               | Lurk                                      | Laravel                  | Next.js           | Django         | Rails             |
 |-----------------------|-------------------------------------------|--------------------------|-------------------|----------------|-------------------|
-| Route definition       | `Router.hs` (explicit)                    | `routes/web.php`         | File-based (`app/`)| `urls.py`      | `config/routes.rb`|
-| Multi-language routing | `getPages allLanguages pathFn actionFn`   | Manual per-route         | `next-intl` plugin| `i18n_patterns`| `I18n` gem        |
-| Route groups           | Not yet                                   | `Route::middleware(...)` | Not needed        | `include()`    | `scope()`         |
-| Named routes           | Not yet                                   | `route('home')`          | Not needed        | `reverse()`    | `root_path`       |
-| POST route helper      | `postActions`                             | `Route::post()`          | API routes        | `path()`       | `post()`          |
+| Route definition       | `Router.hs`                    | `routes/web.php`         | File-based (`app/`)| `urls.py`      | `config/routes.rb`|
+| Multi-language routing | For all langs <br />+ subset <br />+ per-route | Manual per-route         | `next-intl` plugin| `i18n_patterns`| `I18n` gem        |
+| Route groups           | Only on language level              | `Route::middleware(...)` | Not needed        | `include()`    | `scope()`         |
+| Named routes           | As functions                       | `route('home')`          | Not needed        | `reverse()`    | `root_path`       |
+| POST route helper      | `post`                             | `Route::post()`          | API routes        | `path()`       | `post()`          |
 
 ### Forms & Validation
 
 | Feature            | Lurk                                      | Laravel            | Next.js           | Django         | Rails             |
 |--------------------|-------------------------------------------|--------------------|-------------------|----------------|-------------------|
-| Form handling      | `Lurk.Form` (composable pipeline)         | `FormRequest`      | Server Actions    | `forms.py`     | `form_for`        |
-| Anti-abuse         | Guard pipeline: honeypot + timing + MX + length | Manual       | Manual            | Manual         | Manual            |
-| CSRF protection    | Automatic (WAI middleware)                | Token in forms     | Manual            | Token middleware| `authenticity_token` |
+| Form handling      | `Lurk.Form`         | `FormRequest`      | Server Actions    | `forms.py`     | `form_for`        |
+| Anti-abuse         | Guard pipeline | Manual       | Manual            | Manual         | Manual            |
+| CSRF protection    | Automatic middleware                | Token in forms     | Manual            | Token middleware| `authenticity_token` |
 | Validation         | Project-level                             | `Rule::` classes   | Zod/JSR schemas   | `clean()` methods | Validations DSL |
-| Email abstraction  | `Lurk.Email.SMTP` (self-contained)        | `Mail::to()`       | Nodemailer/Resend | `send_mail`    | `ActionMailer`    |
+| Email abstraction  | `Lurk.Email.SMTP`        | `Mail::to()`       | Nodemailer/Resend | `send_mail`    | `ActionMailer`    |
 
 ### Security
 
@@ -72,7 +72,7 @@
 |--------------------|-------------------------|--------------------|-------------------|----------------|-------------------|
 | XSS prevention     | `{{ }}` auto-escape     | `{{ }}` auto-escape| JSX auto-escape   | `{{ }}` auto-escape | `<%= %>` auto-escape |
 | CSRF               | Automatic middleware    | Token verification | Manual            | Middleware     | Middleware        |
-| Session management | File-backed (WAI Vault, per-request) | File/Redis/DB      | Cookie-based      | Cookie/DB/Cache| Cookie/DB/Cache   |
+| Session management | File-backed (Vault, per-request) | File/Redis/DB      | Cookie-based      | Cookie/DB/Cache| Cookie/DB/Cache   |
 | Auth primitives    | `Lurk.Auth` (planned)   | Built-in guards    | NextAuth.js       | `django.contrib.auth` | Devise     |
 | Bot protection     | `Lurk.Form` guards      | Manual             | Manual            | Manual         | Manual            |
 | Rate limiting      | Not yet                 | `ThrottleRequests` | Not built-in      | `ratelimit`    | `rack-attack`     |
@@ -92,7 +92,7 @@
 |--------------|---------------------------|--------------------------|-------------------|----------------|-------------------|
 | Deployment   | `lurk deploy` (SSH/Docker/Shell) | Forge/Vapor/Envoyer | Vercel/Netlify    | Heroku/Railway | Heroku/Render     |
 | Build output | Single binary             | PHP files                | Node.js bundle    | Python package | Ruby gem          |
-| Binary size  | ~55MB (strippable ~20MB)  | N/A                      | N/A               | N/A            | N/A               |
+| Binary size  | ~55MB  | N/A                      | N/A               | N/A            | N/A               |
 | Cold start   | Instant (native binary)   | Fast (opcache)           | Cold (Node.js)    | Moderate       | Moderate          |
 | Process model| Single binary             | PHP-FPM                  | Node.js event loop| Gunicorn       | Puma/Unicorn      |
 
