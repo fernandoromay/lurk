@@ -114,4 +114,33 @@ testFormBodyCache = testGroup "formBodyCache"
         sid <- newSessionId
         cache <- readTVarIO formBodyCache
         assertBool "cache should not contain session before any call" (not $ Map.member sid cache)
+    , testCase "cleanupFormBodyCache removes entry" $ do
+        sid <- newSessionId
+        let params = [("field", "value")]
+        cacheFormBody sid params
+        -- verify entry exists
+        cache1 <- readTVarIO formBodyCache
+        assertBool "cache should contain session" (Map.member sid cache1)
+        -- cleanup
+        cleanupFormBodyCache sid
+        -- verify entry removed
+        cache2 <- readTVarIO formBodyCache
+        assertBool "cache should not contain session after cleanup" (not $ Map.member sid cache2)
+    , testCase "destroySession cleans up formBodyCache" $ do
+        store <- newSessionStore Nothing Nothing
+        sid <- newSessionId
+        now <- getCurrentTime
+        let sess = Session { sessionId = sid, sessionData = Map.empty, sessionAbsoluteExp = Just (addUTCTime 3600 now), sessionIdleExp = Nothing }
+        atomically $ modifyTVar' (storeSessions store) (Map.insert sid sess)
+        -- cache form body
+        let params = [("field", "value")]
+        cacheFormBody sid params
+        -- verify entry exists
+        cache1 <- readTVarIO formBodyCache
+        assertBool "cache should contain session" (Map.member sid cache1)
+        -- destroy session
+        destroySession store sid
+        -- verify cache cleaned up
+        cache2 <- readTVarIO formBodyCache
+        assertBool "cache should not contain session after destroySession" (not $ Map.member sid cache2)
     ]

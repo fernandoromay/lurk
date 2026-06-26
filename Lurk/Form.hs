@@ -16,8 +16,8 @@ import Lurk.Request (request)
 
 import Lurk.Core (Action)
 import Lurk.Session qualified as Session
-import Lurk.Session (SessionStore(..), Session(..), getStoreFromVault)
-import Lurk.CSRF (getSessionIdFromHeaders, getCachedFormParams)
+import Lurk.Session (SessionStore(..), Session(..), getStoreFromVault, getCachedFormParams)
+import Lurk.CSRF (getSessionIdFromHeaders)
 
 -- | Parsed form data extracted from a cached request body.
 newtype FormData = FormData { rawParams :: [(Text, Text)] }

@@ -6,10 +6,6 @@ module Lurk.CSRF
     , validateCsrfToken
     , csrfMiddleware
     , getSessionIdFromHeaders
-    , cacheFormBody
-    , lookupCachedFormParam
-    , getCachedFormParams
-    , formBodyCache
     , csrfToken
     ) where
 
@@ -32,7 +28,6 @@ import Lurk.Core (Action)
 import Lurk.Request (request)
 import Network.Wai qualified as Wai
 import System.Entropy (getEntropy)
-import System.IO.Unsafe (unsafePerformIO)
 
 import Lurk.Session
 
@@ -42,27 +37,9 @@ type CsrfToken = Text
 sessionHeader :: CI.CI BC.ByteString
 sessionHeader = CI.mk "X-Lurk-Session-Id"
 
--- | Global cache for parsed form bodies, keyed by session ID
-{-# NOINLINE formBodyCache #-}
-formBodyCache :: TVar (Map.Map SessionId [(Text, Text)])
-formBodyCache = unsafePerformIO $ newTVarIO Map.empty
-
--- | Cache the parsed form body for a given session ID
-cacheFormBody :: SessionId -> [(Text, Text)] -> IO ()
-cacheFormBody sid params = atomically $
-    modifyTVar' formBodyCache (Map.insert sid params)
-
 -- | Look up a single form parameter from the cache
 lookupCachedFormParam :: Text -> [(Text, Text)] -> Maybe Text
 lookupCachedFormParam = lookup
-
--- | Get all cached form params for a session ID (and remove from cache)
-getCachedFormParams :: SessionId -> IO [(Text, Text)]
-getCachedFormParams sid = atomically $ do
-    cache <- readTVar formBodyCache
-    let params = Map.findWithDefault [] sid cache
-    writeTVar formBodyCache (Map.delete sid cache)
-    pure params
 
 -- | Automatically retrieve the CSRF token from the current Request Vault
 csrfToken :: Action Text

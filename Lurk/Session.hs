@@ -19,6 +19,10 @@ module Lurk.Session
     , storeKey
     , storeVaultMiddleware
     , getStoreFromVault
+    , formBodyCache
+    , cacheFormBody
+    , getCachedFormParams
+    , cleanupFormBodyCache
     ) where
 
 import Control.Concurrent (ThreadId, forkIO, threadDelay)
@@ -84,6 +88,29 @@ getStoreFromVault = do
     case Vault.lookup storeKey (Wai.vault req) of
         Just s -> pure s
         Nothing -> error "SessionStore not found in WAI Vault"
+
+-- | Global cache for parsed form bodies, keyed by session ID
+{-# NOINLINE formBodyCache #-}
+formBodyCache :: TVar (Map.Map SessionId [(Text, Text)])
+formBodyCache = unsafePerformIO $ newTVarIO Map.empty
+
+-- | Cache the parsed form body for a given session ID
+cacheFormBody :: SessionId -> [(Text, Text)] -> IO ()
+cacheFormBody sid params = atomically $
+    modifyTVar' formBodyCache (Map.insert sid params)
+
+-- | Get all cached form params for a session ID (and remove from cache)
+getCachedFormParams :: SessionId -> IO [(Text, Text)]
+getCachedFormParams sid = atomically $ do
+    cache <- readTVar formBodyCache
+    let params = Map.findWithDefault [] sid cache
+    writeTVar formBodyCache (Map.delete sid cache)
+    pure params
+
+-- | Remove cached form body for a session (called when session is destroyed)
+cleanupFormBodyCache :: SessionId -> IO ()
+cleanupFormBodyCache sid = atomically $
+    modifyTVar' formBodyCache (Map.delete sid)
 
 -- | Check if a session has expired based on absolute or idle expiry.
 isSessionExpired :: UTCTime -> Session -> Bool
@@ -263,10 +290,11 @@ deleteSessionValue store sid key = liftIO $ do
             Nothing -> pure Nothing
     for_ sessions (persistSession store)
 
--- | Destroy a session completely: remove from TVar and delete file from disk.
+-- | Destroy a session completely: remove from TVar, clean up form body cache, and delete file from disk.
 destroySession :: SessionStore -> SessionId -> IO ()
 destroySession store sid = do
     atomically $ modifyTVar' (storeSessions store) (Map.delete sid)
+    cleanupFormBodyCache sid
     case store of
         FileStore{..} -> do
             let path = storeDir </> T.unpack sid
