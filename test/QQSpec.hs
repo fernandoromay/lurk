@@ -59,7 +59,7 @@ testNestedLurkApostrophe = do
   |))}}
 </div>
 |] :: Html
-    norm (renderHtml result) @?= "<div> <p>it's</p><p>don't</p> </div>"
+    norm (renderHtml result) @?= "<div> <p>it&#39;s</p><p>don&#39;t</p> </div>"
 
 -- Test 6: Apostrophe in literal text
 testApostropheInText :: Assertion
@@ -113,7 +113,7 @@ testApostropheInNestedLurkText = do
   |))}}
 </div>
 |] :: Html
-    norm (renderHtml result) @?= "<div> <span>Deploy, don't build</span> </div>"
+    norm (renderHtml result) @?= "<div> <span>Deploy, don&#39;t build</span> </div>"
 
 tests :: TestTree
 tests = testGroup "QQ"
