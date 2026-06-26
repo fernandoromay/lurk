@@ -14,11 +14,22 @@ newtype Html = Html { renderHtml :: Text }
 class ToHtml a where
     toHtml :: a -> Html
 
+-- | Escape HTML special characters to prevent XSS
+escapeHtml :: Text -> Html
+escapeHtml = Html . T.concatMap escapeChar
+  where
+    escapeChar '&'  = "&amp;"
+    escapeChar '<'  = "&lt;"
+    escapeChar '>'  = "&gt;"
+    escapeChar '"'  = "&quot;"
+    escapeChar '\'' = "&#39;"
+    escapeChar c    = T.singleton c
+
 instance ToHtml Text where
-    toHtml = Html
+    toHtml = escapeHtml
 
 instance ToHtml String where
-    toHtml = Html . T.pack
+    toHtml = escapeHtml . T.pack
 
 instance ToHtml Html where
     toHtml = id
