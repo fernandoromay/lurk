@@ -22,7 +22,6 @@ module Lurk.Prelude
     , isSubpath
     , trailingSlash
     , preferredLanguages
-    , resolveLanguage
     , clientIp
     , ipChain
     , contextValue
@@ -94,7 +93,7 @@ import Lurk.Assets (asset, mkAssetPath)
 import Lurk.Html (Html, ToHtml (..), renderHtml, forEach, forEachWithIndex)
 import Lurk.QQ (lurk)
 import Lurk.Routes (isSubpath, currentPath, trailingSlash, redirect, RouteOption(..), routeSettings, get, post, delete, put, patch, getSubset, postSubset, deleteSubset, putSubset, patchSubset, getSingle, postSingle, deleteSingle, putSingle, patchSingle)
-import Lurk.Request (preferredLanguages, resolveLanguage, clientIp, ipChain)
+import Lurk.Request (preferredLanguages, clientIp, ipChain)
 import Lurk.Cookie (getCookie, setCookie, setSimpleCookie, deleteCookie)
 import Lurk.Session (SessionId, Session, sessionId, getSession, getSessionValue, setSessionValue, deleteSessionValue, destroySession)
 import Lurk.CSRF (CsrfToken, csrfToken)

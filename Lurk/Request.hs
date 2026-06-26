@@ -1,6 +1,5 @@
 module Lurk.Request
     ( preferredLanguages
-    , resolveLanguage
     , clientIp
     , ipChain
     , parseIpChain
@@ -8,7 +7,6 @@ module Lurk.Request
     , LurkRequest
     ) where
 
-import Data.Maybe (listToMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -17,22 +15,15 @@ import Network.Wai qualified as Wai
 import Lurk.Core (Action, request, LurkRequest)
 
 -- Extract preferred languages from the 'Accept-Language' header.
+-- Returns language codes in header order (no quality parsing).
+-- For quality-sorted parsing, use 'Lurk.Language.Detect.parseAcceptLanguage'.
 preferredLanguages :: Action [Text]
 preferredLanguages = do
     req <- request
     let headers = Wai.requestHeaders req
     case lookup hAcceptLanguage headers of
         Nothing -> pure []
-        Just val -> pure $ parseAcceptLanguage (TE.decodeUtf8 val)
-
--- Parse 'Accept-Language' header value into a list of language codes
-parseAcceptLanguage :: Text -> [Text]
-parseAcceptLanguage = map (T.takeWhile (/= ';') . T.strip) . T.splitOn ","
-
--- | Find the first supported language that matches the browser's preferences
-resolveLanguage :: [Text] -> [Text] -> Maybe Text
-resolveLanguage supported preferred =
-    listToMaybe [ s | p <- preferred, s <- supported, s == p ]
+        Just val -> pure $ map (T.takeWhile (/= ';') . T.strip) $ T.splitOn "," (TE.decodeUtf8 val)
 
 -- | Parse a comma-separated header value into a list of IPs.
 -- Strips whitespace from each entry.

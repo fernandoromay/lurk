@@ -55,6 +55,7 @@ library
                       Lurk.Log
                       Lurk.Html
                       Lurk.Language
+                      Lurk.Language.Detect
                       Lurk.QQ
                       Lurk.Routes
                       Lurk.Routes.Security
@@ -129,6 +130,7 @@ test-suite lurk-tests
                       LogSpec
                       SecuritySpec
                       ErrorSpec
+                      LanguageSpec
     hs-source-dirs:   test
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
     build-depends:    base >=4.17.2.1,
