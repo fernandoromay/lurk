@@ -20,14 +20,18 @@ module Lurk.Log
     , logErrorWith
     ) where
 
+import Control.Concurrent.MVar (MVar, newMVar, modifyMVar)
+import Control.Concurrent.STM (TVar, atomically, newTVarIO, readTVar, writeTVar)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.ByteString.Lazy qualified as LBS
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 import System.Directory (createDirectoryIfMissing, doesFileExist, renameFile)
 import System.FilePath (takeDirectory)
+import System.IO.Unsafe (unsafePerformIO)
 
 -- | A logging action: message + structured fields.
 type Log = Text -> [(Text, Aeson.Value)] -> IO ()
@@ -48,6 +52,31 @@ levelToText LevelInfo    = "info"
 levelToText LevelWarning = "warning"
 levelToText LevelError   = "error"
 
+-- | Global map of per-file mutexes.
+{-# NOINLINE lockMap #-}
+lockMap :: TVar (Map.Map FilePath (MVar ()))
+lockMap = unsafePerformIO $ newTVarIO Map.empty
+
+-- | Get or create a mutex for the given file path.
+getLock :: FilePath -> IO (MVar ())
+getLock path = do
+    mv <- newMVar ()
+    atomically $ do
+        m <- readTVar lockMap
+        case Map.lookup path m of
+            Just v  -> pure v
+            Nothing -> do
+                writeTVar lockMap (Map.insert path mv m)
+                pure mv
+
+-- | Run an action while holding the mutex for the given file path.
+withFileLock :: FilePath -> IO a -> IO a
+withFileLock path action = do
+    mv <- getLock path
+    modifyMVar mv $ \() -> do
+        result <- action
+        pure ((), result)
+
 -- | Write a JSONL entry to the file, appending to existing content.
 writeLog :: FilePath -> LogLevel -> Text -> [(Text, Aeson.Value)] -> IO ()
 writeLog path level msg fields = do
@@ -60,11 +89,12 @@ writeLog path level msg fields = do
             ]
             ++ map (\(k, v) -> Key.fromText k Aeson..= v) fields
     let tmpPath = path ++ ".tmp"
-    createDirectoryIfMissing True (takeDirectory path)
-    exists <- doesFileExist path
-    existing <- if exists then LBS.readFile path else pure ""
-    LBS.writeFile tmpPath (existing <> Aeson.encode entry <> "\n")
-    renameFile tmpPath path
+    withFileLock path $ do
+        createDirectoryIfMissing True (takeDirectory path)
+        exists <- doesFileExist path
+        existing <- if exists then LBS.readFile path else pure ""
+        LBS.writeFile tmpPath (existing <> Aeson.encode entry <> "\n")
+        renameFile tmpPath path
 
 ----------------------------------------------------------------------
 -- LOGGER RECORD
