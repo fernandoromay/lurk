@@ -9,14 +9,17 @@ module Lurk.CSRF
     , cacheFormBody
     , lookupCachedFormParam
     , getCachedFormParams
+    , formBodyCache
     , csrfToken
     ) where
 
 import Control.Concurrent.STM
+import Data.Bifunctor (bimap)
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BC
 import Data.ByteString.Lazy qualified as LBS
 import Data.CaseInsensitive qualified as CI
+import Data.Foldable (for_)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -95,9 +98,7 @@ setCsrfToken store sid token = do
                 writeTVar (storeSessions store) (Map.insert sid updated sessions)
                 pure (Just updated)
             Nothing -> pure Nothing
-    case mSess of
-        Just sess -> persistSession store sess
-        Nothing   -> pure ()
+    for_ mSess (persistSession store)
 
 -- | Get CSRF token from session, generating and storing one if missing
 getCsrfToken :: SessionStore -> SessionId -> IO CsrfToken
@@ -128,16 +129,16 @@ csrfMiddleware store app req respond = do
         then do
             body <- LBS.toStrict <$> Wai.strictRequestBody req
             let rawParams = parseFormParams body
-            let params = map (\(k, v) -> (TE.decodeUtf8 k, urlDecode v)) rawParams
+            let params = map (bimap TE.decodeUtf8 urlDecode) rawParams
             let mSubmitted = lookup "_token" params
             let mSid = TE.decodeUtf8 <$> lookup sessionHeader (requestHeaders req)
             case (mSid, mSubmitted) of
                 (Just sid, Just submitted) -> do
-                    cacheFormBody sid params
                     sessions <- readTVarIO (storeSessions store)
                     case Map.lookup sid sessions of
                         Just sess
-                            | validateCsrfToken sess submitted ->
+                            | validateCsrfToken sess submitted -> do
+                                cacheFormBody sid params
                                 app req respond
                         _ -> respond $ Wai.responseLBS status403
                             [("Content-Type", "text/plain")]

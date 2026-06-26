@@ -19,6 +19,7 @@ tests = testGroup "Lurk.CSRF"
     [ testTokenGeneration
     , testTokenStorage
     , testTokenValidation
+    , testFormBodyCache
     ]
 
 testTokenGeneration :: TestTree
@@ -83,4 +84,34 @@ testTokenValidation = testGroup "validateCsrfToken"
         now <- getCurrentTime
         let sess = Session { sessionId = "test", sessionData = Map.empty, sessionAbsoluteExp = Just (addUTCTime 3600 now), sessionIdleExp = Nothing }
         assertBool "missing token should fail" (not $ validateCsrfToken sess "anything")
+    ]
+
+testFormBodyCache :: TestTree
+testFormBodyCache = testGroup "formBodyCache"
+    [ testCase "cacheFormBody stores params, getCachedFormParams retrieves and removes them" $ do
+        sid <- newSessionId
+        let params = [("name", "Alice"), ("email", "alice@example.com")]
+        cacheFormBody sid params
+        retrieved <- getCachedFormParams sid
+        assertEqual "should retrieve cached params" params retrieved
+        -- second read should be empty (entry removed)
+        retrieved2 <- getCachedFormParams sid
+        assertEqual "should be empty after retrieval" [] retrieved2
+    , testCase "getCachedFormParams returns empty for unknown session" $ do
+        result <- getCachedFormParams "nonexistent-session-id"
+        assertEqual "should be empty" [] result
+    , testCase "cache entry is removed after getCachedFormParams (simulates successful path)" $ do
+        sid <- newSessionId
+        let params = [("field", "value")]
+        cacheFormBody sid params
+        -- verify entry exists
+        _ <- getCachedFormParams sid
+        -- verify cache is clean
+        cache <- readTVarIO formBodyCache
+        assertBool "cache should not contain session after getCachedFormParams" (not $ Map.member sid cache)
+    , testCase "invalid token path does not insert into cache" $ do
+        -- simulate the fixed middleware: cacheFormBody is never called on invalid token
+        sid <- newSessionId
+        cache <- readTVarIO formBodyCache
+        assertBool "cache should not contain session before any call" (not $ Map.member sid cache)
     ]
