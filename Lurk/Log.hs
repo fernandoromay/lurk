@@ -26,7 +26,7 @@ import Data.ByteString.Lazy qualified as LBS
 import Data.Text (Text)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
-import System.Directory (createDirectoryIfMissing, renameFile)
+import System.Directory (createDirectoryIfMissing, doesFileExist, renameFile)
 import System.FilePath (takeDirectory)
 
 -- | A logging action: message + structured fields.
@@ -48,7 +48,7 @@ levelToText LevelInfo    = "info"
 levelToText LevelWarning = "warning"
 levelToText LevelError   = "error"
 
--- | Write a JSONL entry to the file.
+-- | Write a JSONL entry to the file, appending to existing content.
 writeLog :: FilePath -> LogLevel -> Text -> [(Text, Aeson.Value)] -> IO ()
 writeLog path level msg fields = do
     now <- getCurrentTime
@@ -60,7 +60,10 @@ writeLog path level msg fields = do
             ]
             ++ map (\(k, v) -> Key.fromText k Aeson..= v) fields
     let tmpPath = path ++ ".tmp"
-    LBS.writeFile tmpPath (Aeson.encode entry <> "\n")
+    createDirectoryIfMissing True (takeDirectory path)
+    exists <- doesFileExist path
+    existing <- if exists then LBS.readFile path else pure ""
+    LBS.writeFile tmpPath (existing <> Aeson.encode entry <> "\n")
     renameFile tmpPath path
 
 ----------------------------------------------------------------------
