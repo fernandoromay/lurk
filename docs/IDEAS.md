@@ -34,9 +34,9 @@ renderOpaque :: Bool -> Opaque -> Text  -- True = bot, False = human
 
 The view decides what gets protected. Not invisible middleware. It can even be generalized to obfuscate forms or other sensitive elements, reducing the risk of bots reaching out.
 
-### `Lurk.Cloudflare` — Typed Cloudflare Headers (DONE)
+### `Lurk.Cloudflare` — Typed Cloudflare Headers
 
-Implemented header lookups:
+Implemented header lookups (DONE):
 
 ```haskell
 cfCountry     :: Action (Maybe Text)
@@ -163,19 +163,6 @@ blogRoute :: RouteParam BlogRoute
 
 Needed for: blog posts, product variants, user profiles, any CMS-like content.
 Build on top of Scotty's existing `param` function.
-
-### Unified HTTP Method Wrappers — REST Methods
-
-Add `delete`, `put`, `patch` for REST APIs (consolidate with existing `get`/`post`):
-
-```haskell
-delete :: (Enum lang, Bounded lang)
-       => (lang -> Text) -> (lang -> Action ()) -> LurkApp
-put :: (Enum lang, Bounded lang)
-    => (lang -> Text) -> (lang -> Action ()) -> LurkApp
-patch :: (Enum lang, Bounded lang)
-      => (lang -> Text) -> (lang -> Action ()) -> LurkApp
-```
 
 ### Per-Route Middleware (Auth Phase)
 

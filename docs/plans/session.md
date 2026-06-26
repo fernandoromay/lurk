@@ -1,9 +1,5 @@
 # Session Rolling Expiration + ISO 8601
 
-## Goal
-
-Replace single `sessionExpiry` with two independent expiration fields and fix UTCTime serialization.
-
 ## Modes (based on `Config` fields)
 
 | `sessionMaxAge` | `sessionIdle` | Behavior |

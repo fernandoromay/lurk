@@ -14,6 +14,9 @@ Lurk compiles your entire application—including HTML templates and multi-langu
 - **`Lurk.Flash`** — One-time session-based messages for success/error feedback.
 - **`Lurk.Form`** — Composable anti-abuse pipeline: honeypot, timing, MX verification, field length. Guards run in `Action` for session access.
 - **`Lurk.Email.SMTP`** — Self-contained SMTP client (STARTTLS/SMTPS). Zero external email library dependencies.
+- **`Lurk.Routes.Security`** — HTTP security headers middleware (X-Content-Type-Options, X-Frame-Options, HSTS, etc.). Merge API for overrides.
+- **`Lurk.Error`** — Default 404/500 error views (self-contained HTML). Exception middleware catches unhandled errors automatically.
+- **`Lurk.Log`** — Structured JSON logging with `Logger` record, per-level helpers, and file output.
 - **Environment** — Direct OS environment access via `getEnv`/`requireEnv`/`hasEnv`. Reads `.env` at startup with `loadEnv`.
 - **Deployment** — `lurk deploy` builds a binary and deploys it via SSH, Docker, or custom shell scripts.
 - **Static assets** — `mkAssetPath` for fingerprinted asset URLs.
@@ -34,6 +37,7 @@ lib/lurk/
 │   ├── Request.hs        # Request helpers (params, headers, cookies)
 │   ├── Cloudflare.hs     # Typed Cloudflare headers (country, bot score, etc.)
 │   ├── Env.hs            # loadEnv, getEnv, requireEnv
+│   ├── Log.hs            # Structured JSON logging (Logger, LogLevel, file output)
 │   ├── Session.hs        # File-backed session store (TVar) with destroySession
 │   ├── Session/
 │   │   └── Middleware.hs  # WAI middleware for session handling (Secure flag, eager expiry)
@@ -173,7 +177,7 @@ Re-exports everything needed for a typical web app:
 import Lurk.Prelude  -- Html, Action, Text, getEnv, render, redirect, etc.
 ```
 
-### `get` / `post`
+### `get` / `post` / `delete` / `put` / `patch`
 
 Register routes for all languages. The action receives `?lang` implicitly:
 
@@ -182,13 +186,29 @@ get :: (Enum lang, Bounded lang)
     => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
 post :: (Enum lang, Bounded lang)
      => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
+delete :: (Enum lang, Bounded lang)
+       => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
+put :: (Enum lang, Bounded lang)
+    => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
+patch :: (Enum lang, Bounded lang)
+      => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
 ```
 
-`getPages`/`postActions` are available for edge cases (explicit language lists):
+`getSubset`/`postSubset` etc. are available for edge cases (explicit language lists):
 
 ```haskell
-getPages :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
-postActions :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
+getSubset :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
+postSubset :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
+```
+
+`getSingle`/`postSingle` etc. register a single route without language:
+
+```haskell
+getSingle :: Text -> Action () -> LurkApp
+postSingle :: Text -> Action () -> LurkApp
+deleteSingle :: Text -> Action () -> LurkApp
+putSingle :: Text -> Action () -> LurkApp
+patchSingle :: Text -> Action () -> LurkApp
 ```
 
 ### Implicit Language (`?lang`)
@@ -422,13 +442,45 @@ cfBotVerified :: Action (Maybe Bool)  -- Cf-Bot-Verified (True/False)
 
 Not re-exported from `Lurk.Prelude` — import `Lurk.Cloudflare` explicitly.
 
+### `Lurk.Log`
+
+Structured JSON logging:
+
+```haskell
+data LogLevel = LevelDebug | LevelInfo | LevelWarning | LevelError
+
+data Logger = Logger
+  { logDebug   :: Log
+  , logInfo    :: Log
+  , logWarning :: Log
+  , logError   :: Log
+  }
+
+type Log = Text -> [(Text, Value)] -> IO ()
+
+newLogger :: FilePath -> IO Logger
+```
+
+Usage:
+
+```haskell
+logger <- newLogger "logs/app.log"
+logInfo logger "Server started" [("port", toJSON port)]
+logError logger "Connection failed" [("host", toJSON host)]
+```
+
+Each log entry is a JSON line with `level`, `message`, `timestamp`, and optional structured fields. Entries append to the file — previous entries are preserved. The log directory is created automatically.
+
 ### `Lurk.Email.SMTP`
 
 Self-contained SMTP client with no external email library dependencies:
 
 ```haskell
-sendEmail :: SmtpConfig -> Email -> IO (Either EmailError ())
+sendEmail       :: SmtpConfig -> Email -> IO (Either EmailError ())  -- cert validation ON
+sendEmailInsecure :: SmtpConfig -> Email -> IO (Either EmailError ())  -- cert validation OFF
 ```
+
+`sendEmail` validates TLS certificates (secure default). `sendEmailInsecure` skips validation — use only for self-signed or expired certs.
 
 Supports STARTTLS (port 587) and SMTPS (port 465) with automatic detection. Includes AUTH LOGIN, multi-line response parsing, and 30-second timeout.
 

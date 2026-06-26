@@ -4,18 +4,6 @@
 
 Fix race condition in concurrent logging and add minimum log level filtering via `Config`.
 
-## Log Append
-**Locking:** LOW — standalone
-**Easiness:** EASY — change one function
-
-**Problem:** `writeLog` creates `.tmp` file, writes one entry, renames to target. Overwrites entire log file each time — only last entry survives.
-
-**Fix:** Read existing content, append new entry, write back. Or use `appendFile` / `openFile AppendMode`.
-
-**Files:** `Lurk/Log.hs` (lines 52-64)
-
----
-
 ## 1. Per-path mutex (race condition fix)
 
 **Problem:** Two concurrent `writeLog` calls to the same file read the same existing content, then both write — one entry lost.
