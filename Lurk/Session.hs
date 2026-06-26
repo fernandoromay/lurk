@@ -335,3 +335,5 @@ cleanupSessions store = forkIO $ forever $ do
     case store of
         FileStore{..} -> mapM_ (\sid -> removeFile (storeDir </> T.unpack sid)) (Map.keys expired)
         _ -> pure ()
+    -- Remove cached form bodies for expired sessions
+    mapM_ cleanupFormBodyCache (Map.keys expired)
