@@ -4,12 +4,24 @@ module Lurk.Routes
     , trailingSlash
     , RouteOption(..)
     , routeSettings
+    -- All languages
     , get
     , post
-    , getPage
-    , getPages
-    , postAction
-    , postActions
+    , delete
+    , put
+    , patch
+    -- Subset of languages
+    , getSubset
+    , postSubset
+    , deleteSubset
+    , putSubset
+    , patchSubset
+    -- Single route (no language)
+    , getSingle
+    , postSingle
+    , deleteSingle
+    , putSingle
+    , patchSingle
     , redirect
     ) where
 
@@ -87,32 +99,60 @@ routeSettings = mapM_ apply
     apply SecurityHeaders        = middleware securityHeaders
     apply (SecurityHeadersWith h) = middleware (securityHeadersWith h)
 
--- Register a single page
-getPage :: Text -> Action () -> LurkApp
-getPage path = Scotty.get (literal $ T.unpack path)
+-- Single route (no language)
+getSingle :: Text -> Action () -> LurkApp
+getSingle path = Scotty.get (literal $ T.unpack path)
 
--- | Register a page route for each value in a list (multi-language).
-getPages :: [lang] -> (lang -> Text) -> (lang -> Action()) -> LurkApp
-getPages langs pathFn actionFn =
-    mapM_ (\lang -> getPage (pathFn lang) (actionFn lang)) langs
+postSingle :: Text -> Action () -> LurkApp
+postSingle path = Scotty.post (literal $ T.unpack path)
 
--- Register a post action
-postAction :: Text -> Action () -> LurkApp
-postAction path = Scotty.post (literal $ T.unpack path)
+deleteSingle :: Text -> Action () -> LurkApp
+deleteSingle path = Scotty.delete (literal $ T.unpack path)
 
--- | Register a post action for each value in a list (multi-language).
-postActions :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
-postActions langs pathFn actionFn =
-    mapM_ (\lang -> postAction (pathFn lang) (actionFn lang)) langs
+putSingle :: Text -> Action () -> LurkApp
+putSingle path = Scotty.put (literal $ T.unpack path)
 
--- | Register a GET route for each language.
--- The action receives @?lang@ implicitly via 'withLang'.
+patchSingle :: Text -> Action () -> LurkApp
+patchSingle path = Scotty.patch (literal $ T.unpack path)
+
+-- Subset of languages
+getSubset :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
+getSubset langs pathFn actionFn =
+    mapM_ (\lang -> getSingle (pathFn lang) (actionFn lang)) langs
+
+postSubset :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
+postSubset langs pathFn actionFn =
+    mapM_ (\lang -> postSingle (pathFn lang) (actionFn lang)) langs
+
+deleteSubset :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
+deleteSubset langs pathFn actionFn =
+    mapM_ (\lang -> deleteSingle (pathFn lang) (actionFn lang)) langs
+
+putSubset :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
+putSubset langs pathFn actionFn =
+    mapM_ (\lang -> putSingle (pathFn lang) (actionFn lang)) langs
+
+patchSubset :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
+patchSubset langs pathFn actionFn =
+    mapM_ (\lang -> patchSingle (pathFn lang) (actionFn lang)) langs
+
+-- All languages (path function)
 get :: (Enum lang, Bounded lang)
     => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
-get pathFn actionFn = getPages allLanguages pathFn (`withLang` actionFn)
+get pathFn actionFn = getSubset allLanguages pathFn (`withLang` actionFn)
 
--- | Register a POST route for each language.
--- The action receives @?lang@ implicitly via 'withLang'.
 post :: (Enum lang, Bounded lang)
      => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
-post pathFn actionFn = postActions allLanguages pathFn (`withLang` actionFn)
+post pathFn actionFn = postSubset allLanguages pathFn (`withLang` actionFn)
+
+delete :: (Enum lang, Bounded lang)
+       => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
+delete pathFn actionFn = deleteSubset allLanguages pathFn (`withLang` actionFn)
+
+put :: (Enum lang, Bounded lang)
+    => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
+put pathFn actionFn = putSubset allLanguages pathFn (`withLang` actionFn)
+
+patch :: (Enum lang, Bounded lang)
+      => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
+patch pathFn actionFn = patchSubset allLanguages pathFn (`withLang` actionFn)

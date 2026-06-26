@@ -37,10 +37,19 @@ module Lurk.Prelude
     , routeSettings
     , get
     , post
-    , getPage
-    , getPages
-    , postAction
-    , postActions
+    , delete
+    , put
+    , patch
+    , getSubset
+    , postSubset
+    , deleteSubset
+    , putSubset
+    , patchSubset
+    , getSingle
+    , postSingle
+    , deleteSingle
+    , putSingle
+    , patchSingle
     , RouteOption (..)
     -- Language
     , withLang
@@ -85,7 +94,7 @@ import Data.Text.Lazy qualified as TL
 import Lurk.Assets (asset, mkAssetPath)
 import Lurk.Html (Html, ToHtml (..), renderHtml, forEach, forEachWithIndex)
 import Lurk.QQ (lurk)
-import Lurk.Routes (isSubpath, currentPath, trailingSlash, redirect, RouteOption(..), routeSettings, get, post, getPage, getPages, postAction, postActions)
+import Lurk.Routes (isSubpath, currentPath, trailingSlash, redirect, RouteOption(..), routeSettings, get, post, delete, put, patch, getSubset, postSubset, deleteSubset, putSubset, patchSubset, getSingle, postSingle, deleteSingle, putSingle, patchSingle)
 import Lurk.Request (preferredLanguages, resolveLanguage, clientIp, ipChain)
 import Lurk.Cookie (getCookie, setCookie, setSimpleCookie, deleteCookie)
 import Lurk.Session (SessionId, Session, sessionId, getSession, getSessionValue, setSessionValue, deleteSessionValue, destroySession)
