@@ -33,8 +33,6 @@ module Lurk.Prelude
     , notFound
     , serverError
     , module Lurk.SEO
-    , LurkApp
-    , runLurk
     , routeSettings
     , get
     , post
@@ -103,7 +101,7 @@ import Lurk.CSRF (CsrfToken, csrfToken)
 import Lurk.Flash (FlashLevel(..), Flash(..), setFlash, getFlash, flashSuccess, flashError, flashWarning, renderFlash, renderFlashMaybe)
 import Lurk.Env (loadEnv, loadEnvFile, getEnv, getEnvInt, getEnvBool, getEnvWithDefault, requireEnv, hasEnv)
 import Lurk.SEO
-import Lurk.App (LurkApp, runLurk)
+import Lurk.App (LurkApp)
 import Lurk.Language (withLang)
 import Lurk.Core (Action, html, queryParam)
 import Lurk.Core qualified

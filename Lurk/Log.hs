@@ -12,12 +12,14 @@
 module Lurk.Log
     ( Log
     , LogWith
+    , LogLevel (..)
     , Logger(..)
     , newLogger
     , logDebugWith
     , logInfoWith
     , logWarningWith
     , logErrorWith
+    , levelToText
     ) where
 
 import Control.Concurrent.MVar (MVar, newMVar, modifyMVar)
@@ -27,8 +29,10 @@ import Data.Aeson.Key qualified as Key
 import Data.ByteString.Lazy qualified as LBS
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
+import Lurk.Env (getEnvWithDefault)
 import System.Directory (createDirectoryIfMissing, doesFileExist, renameFile)
 import System.FilePath (takeDirectory)
 import System.IO.Unsafe (unsafePerformIO)
@@ -39,10 +43,7 @@ type Log = Text -> [(Text, Aeson.Value)] -> IO ()
 -- | A standalone logging action: file path + message + structured fields.
 type LogWith = FilePath -> Text -> [(Text, Aeson.Value)] -> IO ()
 
-----------------------------------------------------------------------
--- INTERNALS
-----------------------------------------------------------------------
-
+-- | Log level for filtering output.
 data LogLevel = LevelDebug | LevelInfo | LevelWarning | LevelError
     deriving (Show, Eq, Ord)
 
@@ -51,6 +52,14 @@ levelToText LevelDebug   = "debug"
 levelToText LevelInfo    = "info"
 levelToText LevelWarning = "warning"
 levelToText LevelError   = "error"
+
+parseLevel :: Text -> LogLevel
+parseLevel t = case T.toLower t of
+    "debug"   -> LevelDebug
+    "info"    -> LevelInfo
+    "warning" -> LevelWarning
+    "error"   -> LevelError
+    _         -> LevelInfo
 
 -- | Global map of per-file mutexes.
 {-# NOINLINE lockMap #-}
@@ -109,14 +118,17 @@ data Logger = Logger
   }
 
 -- | Create a logger bound to the given file path.
+--   Reads @LURK_LOG_LEVEL@ from the environment (default: @"info"@).
 --   The log directory is created automatically.
 newLogger :: FilePath -> IO Logger
 newLogger path = do
+    raw <- getEnvWithDefault "LURK_LOG_LEVEL" "info"
+    let minLevel = parseLevel raw
     createDirectoryIfMissing True (takeDirectory path)
     pure Logger
-      { logDebug   = writeLog path LevelDebug
-      , logInfo    = writeLog path LevelInfo
-      , logWarning = writeLog path LevelWarning
+      { logDebug   = if minLevel <= LevelDebug   then writeLog path LevelDebug   else \_ _ -> pure ()
+      , logInfo    = if minLevel <= LevelInfo    then writeLog path LevelInfo    else \_ _ -> pure ()
+      , logWarning = if minLevel <= LevelWarning then writeLog path LevelWarning else \_ _ -> pure ()
       , logError   = writeLog path LevelError
       }
 

@@ -9,6 +9,7 @@ import Data.Aeson qualified as Aeson
 import Data.ByteString.Char8 qualified as BC
 import Data.Text qualified as T
 import System.Directory (doesFileExist)
+import System.Environment (setEnv, unsetEnv)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
@@ -21,6 +22,7 @@ tests :: TestTree
 tests = testGroup "Lurk.Log"
     [ testWriteLog
     , testLogger
+    , testLogLevelFiltering
     ]
 
 ----------------------------------------------------------------------
@@ -94,4 +96,65 @@ testLogger = testGroup "Logger"
             content <- BC.readFile path
             let lines' = filter (not . BC.null) (BC.lines content)
             assertEqual "2 entries" 2 (length lines')
+    ]
+
+----------------------------------------------------------------------
+-- LOG LEVEL FILTERING TESTS
+----------------------------------------------------------------------
+
+testLogLevelFiltering :: TestTree
+testLogLevelFiltering = testGroup "LogLevel filtering"
+    [ testCase "level=warning: debug and info suppressed" $ do
+        withSystemTempDirectory "log-test" $ \tmpDir -> do
+            setEnv "LURK_LOG_LEVEL" "warning"
+            let path = tmpDir </> "filtered.log"
+            logger <- newLogger path
+            logDebug logger "should not appear" []
+            logInfo logger "should not appear" []
+            logWarning logger "should appear" []
+            logError logger "should appear" []
+            unsetEnv "LURK_LOG_LEVEL"
+            content <- BC.readFile path
+            let lines' = filter (not . BC.null) (BC.lines content)
+            assertEqual "2 entries (warning + error)" 2 (length lines')
+            assertBool "has warning" ("warning" `BC.isInfixOf` content)
+            assertBool "has error" ("error" `BC.isInfixOf` content)
+            assertBool "no debug" (not ("debug" `BC.isInfixOf` content))
+            assertBool "no info" (not ("\"info\"" `BC.isInfixOf` content))
+    , testCase "level=error: only error writes" $ do
+        withSystemTempDirectory "log-test" $ \tmpDir -> do
+            setEnv "LURK_LOG_LEVEL" "error"
+            let path = tmpDir </> "error-only.log"
+            logger <- newLogger path
+            logDebug logger "nope" []
+            logInfo logger "nope" []
+            logWarning logger "nope" []
+            logError logger "yes" []
+            unsetEnv "LURK_LOG_LEVEL"
+            content <- BC.readFile path
+            let lines' = filter (not . BC.null) (BC.lines content)
+            assertEqual "1 entry (error only)" 1 (length lines')
+    , testCase "level=debug: all levels write" $ do
+        withSystemTempDirectory "log-test" $ \tmpDir -> do
+            setEnv "LURK_LOG_LEVEL" "debug"
+            let path = tmpDir </> "all-levels.log"
+            logger <- newLogger path
+            logDebug logger "d" []
+            logInfo logger "i" []
+            logWarning logger "w" []
+            logError logger "e" []
+            unsetEnv "LURK_LOG_LEVEL"
+            content <- BC.readFile path
+            let lines' = filter (not . BC.null) (BC.lines content)
+            assertEqual "4 entries (all)" 4 (length lines')
+    , testCase "default (no env set): info level" $ do
+        withSystemTempDirectory "log-test" $ \tmpDir -> do
+            unsetEnv "LURK_LOG_LEVEL"
+            let path = tmpDir </> "default.log"
+            logger <- newLogger path
+            logDebug logger "suppressed" []
+            logInfo logger "written" []
+            content <- BC.readFile path
+            let lines' = filter (not . BC.null) (BC.lines content)
+            assertEqual "1 entry (info default)" 1 (length lines')
     ]

@@ -1,8 +1,8 @@
 module Main where
 
 import Paths qualified as P (domain)
-import Lurk.Prelude
-import Lurk.App (Config(..))
+import Lurk.App
+import Lurk.Env (loadEnv)
 import Router
 
 loadConfig :: IO Config
@@ -12,6 +12,7 @@ loadConfig = do
         , domain        = P.domain
         , sessionMaxAge = Nothing
         , sessionIdle   = Nothing
+        , minLogLevel   = LevelInfo
         }
 
 main :: IO ()
