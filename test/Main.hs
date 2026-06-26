@@ -9,6 +9,7 @@ import qualified FlashSpec
 import qualified RequestSpec
 import qualified QQSpec
 import qualified LogSpec
+import qualified SecuritySpec
 
 main :: IO ()
 main = defaultMain $ testGroup "lurk"
@@ -19,4 +20,5 @@ main = defaultMain $ testGroup "lurk"
     , RequestSpec.tests
     , QQSpec.tests
     , LogSpec.tests
+    , SecuritySpec.tests
     ]

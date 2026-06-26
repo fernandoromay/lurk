@@ -6,6 +6,6 @@ import Controller.Static
 
 router :: LurkApp
 router = do
-    routeSettings [ ServeStatic "public" ]
+    routeSettings [ SecurityHeaders, TrailingSlashes, ForceSSL, ServeStatic "public" ]
 
     get homePath homeAction

@@ -56,6 +56,7 @@ library
                       Lurk.Language
                       Lurk.QQ
                       Lurk.Routes
+                      Lurk.Routes.Security
                       Lurk.Request
                       Lurk.SEO
                       Lurk.Session
@@ -125,6 +126,7 @@ test-suite lurk-tests
                       RequestSpec
                       QQSpec
                       LogSpec
+                      SecuritySpec
     hs-source-dirs:   test
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
     build-depends:    base >=4.17.2.1,
@@ -140,4 +142,7 @@ test-suite lurk-tests
                       entropy,
                       stm,
                       temporary,
-                      aeson
+                      aeson,
+                      wai,
+                      wai-extra,
+                      http-types

@@ -18,7 +18,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Text.Lazy qualified as TL
-import Network.HTTP.Types (status301)
+import Network.HTTP.Types (status301, Header)
 import Network.Wai (rawPathInfo, rawQueryString, responseBuilder)
 import Network.Wai qualified as Wai
 import Network.Wai.Middleware.Static (staticPolicy, addBase)
@@ -26,6 +26,7 @@ import Network.Wai.Middleware.ForceSSL (forceSSL)
 import System.Environment (lookupEnv)
 import Lurk.Core (Action)
 import qualified Lurk.Core
+import Lurk.Routes.Security (securityHeaders, securityHeadersWith)
 import Lurk.Request (request)
 import Lurk.App (LurkApp)
 import Lurk.Language (allLanguages, withLang)
@@ -65,6 +66,8 @@ data RouteOption
     = TrailingSlashes       -- ^ Enforce trailing slashes
     | ForceSSL              -- ^ Redirect HTTP to HTTPS
     | ServeStatic FilePath  -- ^ Serve a dir of static assets
+    | SecurityHeaders       -- ^ Add default security headers (X-Content-Type-Options, X-Frame-Options, etc.)
+    | SecurityHeadersWith [Header]  -- ^ Security headers with custom overrides
 
 -- | A smarter ForceSSL that only runs in production
 smartForceSSL :: Wai.Middleware
@@ -78,9 +81,11 @@ smartForceSSL app req respond = do
 routeSettings :: [RouteOption] -> LurkApp
 routeSettings = mapM_ apply
   where
-    apply TrailingSlashes    = middleware trailingSlash
-    apply ForceSSL           = middleware smartForceSSL
-    apply (ServeStatic dir)  = middleware $ staticPolicy (addBase dir)
+    apply TrailingSlashes        = middleware trailingSlash
+    apply ForceSSL               = middleware smartForceSSL
+    apply (ServeStatic dir)      = middleware $ staticPolicy (addBase dir)
+    apply SecurityHeaders        = middleware securityHeaders
+    apply (SecurityHeadersWith h) = middleware (securityHeadersWith h)
 
 -- Register a single page
 getPage :: Text -> Action () -> LurkApp
