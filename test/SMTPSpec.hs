@@ -17,6 +17,7 @@ tests = testGroup "Lurk.Email.SMTP"
     , testEmail
     , testEmailError
     , testSendEmailErrors
+    , testSendEmailInsecure
     ]
 
 ----------------------------------------------------------------------
@@ -92,6 +93,27 @@ testSendEmailErrors = testGroup "sendEmail error handling"
         let cfg = mkTestConfig { smtpPort = 1 }
             email = Email "test@example.com" "Test" "<p>test</p>"
         result <- sendEmail cfg email
+        case result of
+            Left (SmtpConnectionError _) -> pure ()
+            Left SmtpTimeout -> pure ()
+            Left other -> assertFailure $ "unexpected error: " ++ show other
+            Right () -> assertFailure "should not succeed"
+    ]
+
+----------------------------------------------------------------------
+-- sendEmailInsecure TESTS
+----------------------------------------------------------------------
+
+testSendEmailInsecure :: TestTree
+testSendEmailInsecure = testGroup "sendEmailInsecure"
+    [ testCase "has same type as sendEmail" $ do
+        -- Verify sendEmailInsecure exists and compiles with the right type
+        let _ = sendEmailInsecure :: SmtpConfig -> Email -> IO (Either EmailError ())
+        pure ()
+    , testCase "non-existent host returns SmtpConnectionError or SmtpTimeout" $ do
+        let cfg = mkTestConfig { smtpHost = "192.0.2.1" }
+            email = Email "test@example.com" "Test" "<p>test</p>"
+        result <- sendEmailInsecure cfg email
         case result of
             Left (SmtpConnectionError _) -> pure ()
             Left SmtpTimeout -> pure ()

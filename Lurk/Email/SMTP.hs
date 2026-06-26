@@ -6,6 +6,7 @@ module Lurk.Email.SMTP
     , Email(..)
     , EmailError(..)
     , sendEmail
+    , sendEmailInsecure
     ) where
 
 import Control.Exception (bracket, try, throwIO, fromException, Exception, SomeException)
@@ -51,9 +52,18 @@ data EmailError
 instance Exception EmailError
 
 -- | Send an email using SMTP over a TCP connection.
--- Uses 'smtpEncryption' to determine TLS behavior.
+-- TLS certificate validation is enabled (secure default).
 sendEmail :: SmtpConfig -> Email -> IO (Either EmailError ())
-sendEmail config email = do
+sendEmail = sendEmailWith False
+
+-- | Send an email using SMTP, skipping TLS certificate validation.
+-- Use only when connecting to servers with self-signed or expired certs.
+sendEmailInsecure :: SmtpConfig -> Email -> IO (Either EmailError ())
+sendEmailInsecure = sendEmailWith True
+
+-- | Internal: core SMTP logic with cert validation toggle.
+sendEmailWith :: Bool -> SmtpConfig -> Email -> IO (Either EmailError ())
+sendEmailWith disableCert config email = do
     let host = T.unpack (smtpHost config)
         port = smtpPort config
 
@@ -61,7 +71,7 @@ sendEmail config email = do
         ctx <- Conn.initConnectionContext
         let useTls = parseEncryption (smtpEncryption config) == SmtpS
             tlsSettings = Conn.TLSSettingsSimple
-                { Conn.settingDisableCertificateValidation = True
+                { Conn.settingDisableCertificateValidation = disableCert
                 , Conn.settingDisableSession = False
                 , Conn.settingUseServerName = False
                 }
