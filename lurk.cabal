@@ -49,6 +49,7 @@ library
                       Lurk.CSRF
                       Lurk.Email.SMTP
                       Lurk.Env
+                      Lurk.Error
                       Lurk.Flash
                       Lurk.Form
                       Lurk.Log
@@ -127,6 +128,7 @@ test-suite lurk-tests
                       QQSpec
                       LogSpec
                       SecuritySpec
+                      ErrorSpec
     hs-source-dirs:   test
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
     build-depends:    base >=4.17.2.1,

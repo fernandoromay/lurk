@@ -31,6 +31,7 @@ module Lurk.Prelude
     , setSimpleCookie
     , deleteCookie
     , notFound
+    , serverError
     , module Lurk.SEO
     , LurkApp
     , runLurk
@@ -133,3 +134,7 @@ render viewHtml ctx = do
 -- | Catch-all route that automatically sets the HTTP 404 status
 notFound :: Action () -> LurkApp
 notFound action = Lurk.Core.notFound (Lurk.Core.status Http.status404 >> action)
+
+-- | Catch-all route that automatically sets the HTTP 500 status
+serverError :: Action () -> LurkApp
+serverError action = Lurk.Core.notFound (Lurk.Core.status Http.status500 >> action)
