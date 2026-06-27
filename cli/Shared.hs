@@ -12,7 +12,7 @@ module Shared
     , normalizeName
     ) where
 
-import System.Environment (lookupEnv, setEnv)
+import Lurk.Env (loadEnv)
 import System.Directory (doesFileExist, doesDirectoryExist, listDirectory)
 import System.FilePath (isPathSeparator, normalise, takeFileName, dropExtension, (</>))
 import Control.Monad (filterM)
@@ -90,26 +90,9 @@ capitalize s = toUpper (head s) : tail s
 normalizeName :: String -> String
 normalizeName = reverse . dropWhile (== '-') . reverse . map toLower . map (\c -> if c == ' ' then '-' else c) . filter (\c -> isAlpha c || c == ' ' || c == '-')
 
+-- | Load .env file using the library's parser (supports # comments, quoted values)
 loadDotEnv :: IO ()
-loadDotEnv = do
-    exists <- doesFileExist ".env"
-    if not exists then pure () else do
-        content <- TIO.readFile ".env"
-        mapM_ (processLine . T.strip) $ T.lines content
-  where
-    processLine line
-        | T.null line = pure ()
-        | "--" `T.isPrefixOf` line = pure ()
-        | otherwise = case T.breakOn "=" line of
-            (key, val)
-                | T.null key -> pure ()
-                | otherwise -> do
-                    let k = T.unpack (T.strip key)
-                        v = T.unpack (T.strip (T.drop 1 val))
-                    existing <- lookupEnv k
-                    case existing of
-                        Just _ -> pure ()
-                        Nothing -> setEnv k v
+loadDotEnv = loadEnv
 
 updateCabalModules :: IO ()
 updateCabalModules = do
