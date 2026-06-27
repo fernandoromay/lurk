@@ -1,8 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Shared
-    ( loadDotEnv
-    , updateCabalModules
+    ( updateCabalModules
     , scaffoldTemplates
     , availableScaffoldTypes
     , promptChoice
@@ -10,14 +9,24 @@ module Shared
     , promptProjectName
     , capitalize
     , normalizeName
+    , isHsFile
+    , isHsModuleFile
+    , cleanLeadingSlash
+    , filterTemplates
+    , resolveTargetDir
+    , isImportLine
+    , splitAtImports
+    , safeReadProcess
+    , safeCallProcess
     ) where
 
-import Lurk.Env (loadEnv)
 import System.Directory (doesFileExist, doesDirectoryExist, listDirectory)
 import System.FilePath (isPathSeparator, normalise, takeFileName, dropExtension, (</>))
+import System.Process (readProcess, callProcess)
+import System.IO.Error (tryIOError, isDoesNotExistError)
 import Control.Monad (filterM)
 import Data.Char (isAsciiUpper, isAlpha, toLower, toUpper)
-import Data.List (isSuffixOf, sort)
+import Data.List (isPrefixOf, isSuffixOf, sort, dropWhileEnd)
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -31,20 +40,13 @@ scaffoldTemplates = $(makeRelativeToProject "templates" >>= embedDir)
 -- | Available scaffold types from embedded templates
 availableScaffoldTypes :: [String]
 availableScaffoldTypes =
-    let cleanPath = dropWhile (== '/')
-        dirs = map (cleanPath . fst) scaffoldTemplates
+    let dirs = map (cleanLeadingSlash . fst) scaffoldTemplates
         topDirs = Set.toList $ Set.fromList
-            [ head (splitOn '/' dir)
+            [ takeWhile (/= '/') dir
             | dir <- dirs
             , '/' `elem` dir
             ]
     in topDirs
-  where
-    splitOn _ [] = [""]
-    splitOn c s
-        | null rest = [taken]
-        | otherwise = taken : splitOn c (drop 1 rest)
-      where (taken, rest) = break (== c) s
 
 -- | Prompt user to choose from numbered options
 promptChoice :: String -> [(String, String)] -> IO String
@@ -84,15 +86,66 @@ promptProjectName defaultName = do
 -- | Capitalize first letter
 capitalize :: String -> String
 capitalize "" = ""
-capitalize s = toUpper (head s) : tail s
+capitalize (c:cs) = toUpper c : cs
 
 -- | Normalize project name: lowercase, spaces to hyphens, trim trailing hyphens
 normalizeName :: String -> String
 normalizeName = reverse . dropWhile (== '-') . reverse . map toLower . map (\c -> if c == ' ' then '-' else c) . filter (\c -> isAlpha c || c == ' ' || c == '-')
 
--- | Load .env file using the library's parser (supports # comments, quoted values)
-loadDotEnv :: IO ()
-loadDotEnv = loadEnv
+-- File predicates
+isHsFile :: FilePath -> Bool
+isHsFile f = ".hs" `isSuffixOf` f
+
+isHsModuleFile :: FilePath -> Bool
+isHsModuleFile f = isHsFile f && takeFileName f /= "Main.hs"
+
+-- Path helpers
+cleanLeadingSlash :: FilePath -> FilePath
+cleanLeadingSlash = dropWhile (== '/')
+
+-- Template helpers
+filterTemplates :: String -> [(FilePath, ByteString)] -> [(FilePath, ByteString)]
+filterTemplates prefix = filter (\(fp, _) -> prefix `isPrefixOf` cleanLeadingSlash fp)
+
+-- Interactive helpers
+resolveTargetDir :: String -> IO String
+resolveTargetDir question = do
+    target <- promptChoice question
+        [ ("Root directory (.)", ".")
+        , ("Web/ subdirectory", "Web")
+        , ("Custom directory", "")
+        ]
+    case target of
+        "." -> pure "."
+        "" -> promptCustomDir
+        custom -> pure custom
+
+-- Haskell source helpers
+isImportLine :: T.Text -> Bool
+isImportLine l = "import " `T.isPrefixOf` T.strip l
+
+splitAtImports :: [T.Text] -> ([T.Text], [T.Text], [T.Text])
+splitAtImports ls =
+    let (before, rest) = span (not . isImportLine) ls
+        (imports, after) = span isImportLine rest
+    in (before, imports, after)
+
+-- Safe process execution
+safeReadProcess :: String -> [String] -> IO (Either String String)
+safeReadProcess cmd args = do
+    result <- tryIOError $ readProcess cmd args ""
+    case result of
+        Left e | isDoesNotExistError e -> pure $ Left $ "Required tool not found: " ++ cmd
+               | otherwise -> pure $ Left $ "Command failed: " ++ cmd ++ " (" ++ show e ++ ")"
+        Right output -> pure $ Right $ dropWhileEnd (== '\n') output
+
+safeCallProcess :: String -> [String] -> IO (Either String ())
+safeCallProcess cmd args = do
+    result <- tryIOError $ callProcess cmd args
+    case result of
+        Left e | isDoesNotExistError e -> pure $ Left $ "Required tool not found: " ++ cmd
+               | otherwise -> pure $ Left $ "Command failed: " ++ cmd ++ " (" ++ show e ++ ")"
+        Right () -> pure $ Right ()
 
 updateCabalModules :: IO ()
 updateCabalModules = do
@@ -122,9 +175,7 @@ discoverModules = do
 
     rootHsFiles <- filterM (\f -> do
         isFile <- doesFileExist f
-        let isHs = ".hs" `isSuffixOf` f
-        let isNotMain = takeFileName f /= "Main.hs"
-        return (isFile && isHs && isNotMain)
+        return (isFile && isHsModuleFile f)
         ) allFiles
 
     let rootMods = map dropExtension rootHsFiles
@@ -142,7 +193,7 @@ scanDir dir = do
             files <- filterM doesFileExist fullPaths
             subdirs <- filterM doesDirectoryExist fullPaths
 
-            let hsFiles = filter (\f -> ".hs" `isSuffixOf` f && takeFileName f /= "Main.hs") files
+            let hsFiles = filter isHsModuleFile files
             let currentModules = map (pathToModule . dropExtension) hsFiles
 
             subModules <- concat <$> mapM scanDir subdirs

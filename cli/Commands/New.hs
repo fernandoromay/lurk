@@ -3,11 +3,11 @@ module Commands.New
     ( newProject
     ) where
 
-import System.Directory (doesDirectoryExist, listDirectory, createDirectoryIfMissing, doesFileExist, renameFile, copyFile, getCurrentDirectory)
+import System.Directory (doesDirectoryExist, listDirectory, createDirectoryIfMissing, doesFileExist, renameFile, getCurrentDirectory)
 import System.FilePath (takeBaseName, takeFileName, takeDirectory, dropExtension, (</>))
 import Control.Monad (filterM, when)
 import Data.List (isPrefixOf, isSuffixOf)
-import Data.Char (isAlphaNum, isLower, toLower, toUpper)
+import Data.Char (isAlphaNum, toLower)
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -121,19 +121,6 @@ buildScaffold scaffoldType targetDir projectName prefix usePrefix = do
 
         putStrLn $ "\nDone! Next steps:"
         putStrLn $ "  lurk run"
-
-copyDir :: FilePath -> FilePath -> IO ()
-copyDir src dest = do
-    createDirectoryIfMissing True dest
-    entries <- listDirectory src
-    mapM_ (\entry -> do
-        let srcPath = src </> entry
-            destPath = dest </> entry
-        isDir <- doesDirectoryExist srcPath
-        if isDir
-            then copyDir srcPath destPath
-            else copyFile srcPath destPath
-        ) entries
 
 prefixHsFile :: FilePath -> String -> Set.Set T.Text -> IO ()
 prefixHsFile filePath prefix localModules = do

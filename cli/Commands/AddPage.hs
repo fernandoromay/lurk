@@ -6,7 +6,7 @@ module Commands.AddPage
 import System.Directory (doesDirectoryExist, listDirectory, createDirectoryIfMissing, doesFileExist)
 import System.FilePath ((</>), takeFileName, dropExtension)
 import Control.Monad (when)
-import Data.List (isPrefixOf, isSuffixOf, isInfixOf)
+import Data.List (isPrefixOf, isSuffixOf)
 import Data.Char (isAlphaNum, toLower, toUpper)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO

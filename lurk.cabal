@@ -129,7 +129,8 @@ executable lurk
                       lurk,
                       ansi-terminal,
                       file-embed,
-                      template-haskell
+                      template-haskell,
+                      transformers
 
 test-suite lurk-tests
     type:             exitcode-stdio-1.0

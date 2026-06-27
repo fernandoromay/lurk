@@ -4,7 +4,6 @@ module Commands.Deploy
     , initCommand
     ) where
 
-import System.Process (readProcess)
 import System.Directory (createDirectoryIfMissing)
 import System.IO (hPutStr, hClose)
 import System.IO.Temp (withSystemTempFile)
@@ -23,7 +22,7 @@ import qualified Lurk.Deploy.SSH as DeploySSH
 import qualified Lurk.Deploy.Docker as DeployDocker
 import qualified Log
 
-import Shared (updateCabalModules)
+import Shared (updateCabalModules, safeReadProcess)
 
 -- | Entry point for lurk deploy
 deployCommand :: IO ()
@@ -112,12 +111,16 @@ initCommand = do
     _ <- Deploy.saveDeployConfig "lurk.yaml" newCfg
     putStrLn $ "Generated lurk.yaml (project: " ++ projectName ++ ")"
 
-    ghcVer <- init <$> readProcess "ghc" ["--numeric-version"] ""
-    cabalVer <- init <$> readProcess "cabal" ["--numeric-version"] ""
+    ghcVerRes <- safeReadProcess "ghc" ["--numeric-version"]
+    cabalVerRes <- safeReadProcess "cabal" ["--numeric-version"]
 
-    let yaml = generateWorkflowYaml (Map.keys updatedVars) ghcVer cabalVer
-    TIO.writeFile ".github/workflows/deploy.yml" (T.pack yaml)
-    putStrLn "Generated .github/workflows/deploy.yml"
+    case (ghcVerRes, cabalVerRes) of
+        (Left err, _) -> putStrLn $ "Error detecting GHC version: " ++ err
+        (_, Left err) -> putStrLn $ "Error detecting Cabal version: " ++ err
+        (Right ghcVer, Right cabalVer) -> do
+            let yaml = generateWorkflowYaml (Map.keys updatedVars) ghcVer cabalVer
+            TIO.writeFile ".github/workflows/deploy.yml" (T.pack yaml)
+            putStrLn "Generated .github/workflows/deploy.yml"
 
 generateWorkflowYaml :: [String] -> String -> String -> String
 generateWorkflowYaml keys ghcVer cabalVer =
@@ -173,7 +176,7 @@ generateWorkflowYaml keys ghcVer cabalVer =
          , "      - name: Deploy"
          , "        env:"
          , "          # --- App Secrets ---"
-        ] ++ map (\k -> "          " ++ k ++ ": ${{ secrets." ++ k ++ " }}") keys ++
+         ] ++ map (\k -> "          " ++ k ++ ": ${{ secrets." ++ k ++ " }}") keys ++
         [ "          # --- SSH Secrets ---"
         , "          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}"
         , "          VPS_IP: ${{ secrets.VPS_IP }}"
