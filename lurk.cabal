@@ -111,6 +111,7 @@ executable lurk
     other-modules:    Log
                       Shared
                       Commands.Kill
+                      Commands.Deploy
     hs-source-dirs:   cli
     build-depends:    base ^>=4.17.2.1,
                       directory,
