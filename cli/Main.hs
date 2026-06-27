@@ -1,16 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
 module Main where
 
-import System.Environment (getArgs, lookupEnv, setEnv)
+import System.Environment (getArgs, lookupEnv)
 import System.Process (callProcess, rawSystem, readProcess)
 import System.Directory
 import System.FilePath
 import System.IO (hPutStr, hClose)
 import System.IO.Temp (withSystemTempFile)
 import Control.Monad (filterM, when, unless)
-import Data.List (isPrefixOf, isSuffixOf, sort, isInfixOf)
-import Data.Char (isAsciiUpper, isAlpha, isAlphaNum, isLower, toLower, toUpper)
+import Data.List (isPrefixOf, isSuffixOf, isInfixOf)
+import Data.Char (isAlphaNum, isLower, toLower, toUpper)
 import System.Info (os)
 import Data.Maybe (fromMaybe, isNothing)
 import qualified Data.Set as Set
@@ -21,19 +20,18 @@ import qualified Lurk.Deploy as Deploy
 import qualified Lurk.Deploy.SSH as DeploySSH
 import qualified Lurk.Deploy.Docker as DeployDocker
 import qualified Log
-import Data.FileEmbed (embedDir, makeRelativeToProject)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.Text.Encoding as TE
-import Data.Aeson (Value(..), Object, fromJSON, parseJSON)
+import Data.Aeson (Value(..), parseJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.Aeson.Key as Key
 import Data.Aeson.Types (parseMaybe)
 
--- | All scaffold templates embedded at compile time
-scaffoldTemplates :: [(FilePath, ByteString)]
-scaffoldTemplates = $(makeRelativeToProject "templates" >>= embedDir)
+import Shared ( loadDotEnv, updateCabalModules, scaffoldTemplates
+              , availableScaffoldTypes, promptChoice, promptCustomDir
+              , promptProjectName, capitalize, normalizeName )
 
 main :: IO ()
 main = do
@@ -358,24 +356,6 @@ newProject scaffoldType = do
                                 else putStrLn $ "Error: Directory '" ++ targetDir ++ "' is not empty."
                         else scaffold
 
--- | Available scaffold types from embedded templates
-availableScaffoldTypes :: [String]
-availableScaffoldTypes =
-    let cleanPath = dropWhile (== '/')
-        dirs = map (cleanPath . fst) scaffoldTemplates
-        topDirs = Set.toList $ Set.fromList
-            [ head (splitOn '/' dir)
-            | dir <- dirs
-            , '/' `elem` dir
-            ]
-    in topDirs
-  where
-    splitOn _ [] = [""]
-    splitOn c s
-        | null rest = [taken]
-        | otherwise = taken : splitOn c (drop 1 rest)
-      where (taken, rest) = break (== c) s
-
 buildScaffold :: String -> String -> String -> String -> Bool -> IO (IO ())
 buildScaffold scaffoldType targetDir projectName prefix usePrefix = do
     let templatePrefix = scaffoldType ++ "/"
@@ -443,28 +423,6 @@ buildScaffold scaffoldType targetDir projectName prefix usePrefix = do
 
         putStrLn $ "\nDone! Next steps:"
         putStrLn $ "  lurk run"
-
-promptCustomDir :: IO String
-promptCustomDir = do
-    putStrLn "Directory name:"
-    putStr "> "
-    name <- getLine
-    let cleaned = filter (\c -> isAlpha c || c == ' ') name
-    if null cleaned
-        then do
-            putStrLn "Error: Name must contain at least one letter."
-            promptCustomDir
-        else pure (capitalize (filter isAlpha cleaned))
-
-promptProjectName :: String -> IO String
-promptProjectName defaultName = do
-    putStrLn $ "Project name [" ++ defaultName ++ "]:"
-    putStr "> "
-    name <- getLine
-    let cleaned = normalizeName name
-    if null cleaned
-        then pure defaultName
-        else pure cleaned
 
 -- | Copy a directory recursively, skipping hidden files
 copyDir :: FilePath -> FilePath -> IO ()
@@ -544,148 +502,10 @@ discoverLocalModulesFromContent files =
     extractModuleName line
         | "module " `T.isPrefixOf` stripped =
             let afterKw = T.drop 7 line
-                name = T.takeWhile (\c -> isAlpha c || c == '_' || c == '\'' || c == '.') afterKw
+                name = T.takeWhile (\c -> isAlphaNum c || c == '_' || c == '\'' || c == '.') afterKw
             in [name | not (T.null name) && name /= "Main"]
         | otherwise = []
       where stripped = T.stripStart line
-
--- | Capitalize first letter
-capitalize :: String -> String
-capitalize "" = ""
-capitalize s = toUpper (head s) : tail s
-
--- | Normalize project name: lowercase, spaces to hyphens, trim trailing hyphens
-normalizeName :: String -> String
-normalizeName = reverse . dropWhile (== '-') . reverse . map toLower . map (\c -> if c == ' ' then '-' else c) . filter (\c -> isAlpha c || c == ' ' || c == '-')
-
--- | Prompt user to choose from numbered options
-promptChoice :: String -> [(String, String)] -> IO String
-promptChoice question options = do
-    putStrLn question
-    mapM_ (\(i, (label, _)) -> putStrLn $ "  " ++ show i ++ ") " ++ label) (zip [1::Int ..] options)
-    putStr "> "
-    input <- getLine
-    case reads input of
-        [(n, _)] | n >= 1 && n <= length options -> pure (snd (options !! (n - 1)))
-        _ -> do
-            putStrLn "Invalid choice."
-            promptChoice question options
-
-loadDotEnv :: IO ()
-loadDotEnv = do
-    exists <- doesFileExist ".env"
-    if not exists then pure () else do
-        content <- TIO.readFile ".env"
-        mapM_ (processLine . T.strip) $ T.lines content
-  where
-    processLine line
-        | T.null line = pure ()
-        | "--" `T.isPrefixOf` line = pure ()
-        | otherwise = case T.breakOn "=" line of
-            (key, val)
-                | T.null key -> pure ()
-                | otherwise -> do
-                    let k = T.unpack (T.strip key)
-                        v = T.unpack (T.strip (T.drop 1 val))
-                    existing <- lookupEnv k
-                    case existing of
-                        Just _ -> pure ()  -- don't override existing env vars
-                        Nothing -> setEnv k v
-
-updateCabalModules :: IO ()
-updateCabalModules = do
-    cabalFiles <- filter (".cabal" `isSuffixOf`) <$> listDirectory "."
-    case cabalFiles of
-        [] -> putStrLn "Warning: No .cabal file found in current directory."
-        (cabalFile:_) -> do
-            putStrLn $ "Scanning directory for Haskell modules to update " ++ cabalFile ++ "..."
-            modules <- discoverModules
-            content <- TIO.readFile cabalFile
-            case injectModules content modules of
-                Nothing -> putStrLn "Warning: Could not find 'other-modules:' in the cabal file."
-                Just newContent -> do
-                    TIO.writeFile cabalFile newContent
-                    putStrLn "Successfully auto-updated cabal other-modules."
-
-discoverModules :: IO [String]
-discoverModules = do
-    -- 1. Find all root-level directories that start with a capital letter
-    allFiles <- listDirectory "."
-    srcDirs <- filterM (\d -> do
-        isDir <- doesDirectoryExist d
-        let isCap = not (null d) && isAsciiUpper (head d)
-        return (isDir && isCap)
-        ) allFiles
-    
-    -- 2. Scan those directories recursively
-    subDirModules <- concat <$> mapM scanDir srcDirs
-    
-    -- 3. Find root-level .hs files (excluding Main.hs)
-    rootHsFiles <- filterM (\f -> do
-        isFile <- doesFileExist f
-        let isHs = ".hs" `isSuffixOf` f
-        let isNotMain = takeFileName f /= "Main.hs"
-        return (isFile && isHs && isNotMain)
-        ) allFiles
-    
-    let rootMods = map dropExtension rootHsFiles
-    
-    return $ sort (subDirModules ++ rootMods)
-
-scanDir :: FilePath -> IO [String]
-scanDir dir = do
-    exists <- doesDirectoryExist dir
-    if not exists
-        then return []
-        else do
-            content <- listDirectory dir
-            let fullPaths = map (dir </>) content
-            files <- filterM doesFileExist fullPaths
-            subdirs <- filterM doesDirectoryExist fullPaths
-            
-            let hsFiles = filter (\f -> ".hs" `isSuffixOf` f && takeFileName f /= "Main.hs") files
-            let currentModules = map (pathToModule . dropExtension) hsFiles
-            
-            subModules <- concat <$> mapM scanDir subdirs
-            return (currentModules ++ subModules)
-
-pathToModule :: FilePath -> String
-pathToModule path = map replaceSep (normalise path)
-  where
-    replaceSep c | isPathSeparator c = '.'
-                 | otherwise         = c
-
-injectModules :: T.Text -> [String] -> Maybe T.Text
-injectModules content modules = do
-    let linesOfContent = T.lines content
-    let indexedLines = zip [(0::Int)..] linesOfContent
-    
-    startIndex <- lookupIndex "other-modules:" indexedLines
-    
-    -- Find where the next field starts (a line containing ':' that is not 'other-modules:')
-    let afterStart = drop (startIndex + 1) indexedLines
-    
-    let isNextField (_, line) = 
-            let stripped = T.strip line
-            in ":" `T.isInfixOf` stripped && not ("--" `T.isPrefixOf` stripped)
-            
-    let blockLines = takeWhile (not . isNextField) afterStart
-    let endIndex = if null blockLines then startIndex + 1 else fst (last blockLines) + 1
-    
-    let formattedModules = map (\m -> "                     " <> T.pack m <> ",") modules
-    let cleanFormatted = case reverse formattedModules of
-            [] -> []
-            (x:xs) -> reverse (T.init x : xs) -- Remove last comma
-            
-    let (before, _) = splitAt (startIndex + 1) linesOfContent
-    let (_, after) = splitAt endIndex linesOfContent
-    
-    return $ T.unlines (before ++ cleanFormatted ++ after)
-  where
-    lookupIndex query [] = Nothing
-    lookupIndex query ((idx, line):xs)
-        | query `T.isInfixOf` line && not ("--" `T.isPrefixOf` T.strip line) = Just idx
-        | otherwise = lookupIndex query xs
 
 addPage :: String -> IO ()
 addPage defaultName = do
@@ -848,4 +668,3 @@ addPage defaultName = do
                 
             putStrLn "Page scaffolding complete!"
         _ -> putStrLn "Error: Could not find Locale.hs or View.hs templates in add/page/"
-
