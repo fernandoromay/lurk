@@ -26,6 +26,8 @@ extra-source-files: templates/website/Main.hs
                     templates/website/public/robots.txt
                     templates/website/public/sitemap.xml
                     templates/website/public/llms.txt
+                    templates/add/page/Locale.hs
+                    templates/add/page/View.hs
 
 library
     default-language: GHC2021
