@@ -42,6 +42,8 @@ addPage defaultName = do
         "" -> promptCustomDir
         custom -> pure custom
 
+    let modPrefix = if targetDir == "." then "" else capitalize targetDir ++ "."
+
     let ctrlDir = targetDir </> "Controller"
     ctrlExists <- doesDirectoryExist ctrlDir
     ctrlFiles <- if ctrlExists
@@ -81,6 +83,7 @@ addPage defaultName = do
     case (mLocaleTemplate, mViewTemplate) of
         (Just localeTpl, Just viewTpl) -> do
             let replacePlaceholders text =
+                    T.replace "{{ModPrefix}}" (T.pack modPrefix) $
                     T.replace "{{PascalName}}" (T.pack pascalName) $
                     T.replace "{{camelName}}" (T.pack camelName) $
                     T.replace "{{kebab-name}}" (T.pack kebabName) text
@@ -132,8 +135,8 @@ addPage defaultName = do
                 let (beforeImports, rest1) = span (not . isImport) cLines
                 let (imports, afterImports) = span isImport rest1
                 let newImports =
-                        [ T.pack $ "import View." ++ pascalName
-                        , T.pack $ "import Locale." ++ pascalName ++ " qualified as " ++ pascalName
+                        [ T.pack $ "import " ++ modPrefix ++ "View." ++ pascalName
+                        , T.pack $ "import " ++ modPrefix ++ "Locale." ++ pascalName ++ " qualified as " ++ pascalName
                         ]
 
                 let actionImpl = T.pack $ unlines
@@ -146,21 +149,21 @@ addPage defaultName = do
                 TIO.writeFile targetCtrl updatedCtrl
                 putStrLn $ "Updated " ++ targetCtrl
 
-            -- Inject into Router.hs
-            let routerFile = targetDir </> "Router.hs"
+            -- Inject into Router.hs (always at project root)
+            let routerFile = "Router.hs"
             routerExists <- doesFileExist routerFile
             when routerExists $ do
                 routerContent <- TIO.readFile routerFile
                 let rLines = T.lines routerContent
 
                 let ctrlModName = dropExtension (takeFileName targetCtrl)
-                let hasCtrlImport = any (\l -> ("import Controller." <> T.pack ctrlModName) `T.isInfixOf` l) rLines
+                let hasCtrlImport = any (\l -> ("import " <> T.pack modPrefix <> "Controller." <> T.pack ctrlModName) `T.isInfixOf` l) rLines
                 let isImport l = "import " `T.isPrefixOf` T.strip l
                 let rLinesWithImport = if hasCtrlImport || null targetCtrl
                         then rLines
                         else let (bi, r1) = span (not . isImport) rLines
                                  (ims, ai) = span isImport r1
-                             in bi ++ ims ++ [T.pack $ "import Controller." ++ ctrlModName] ++ ai
+                             in bi ++ ims ++ [T.pack $ "import " ++ modPrefix ++ "Controller." ++ ctrlModName] ++ ai
 
                 let injectRoute [] = [T.pack $ "    get " ++ camelName ++ "Path " ++ camelName ++ "Action"]
                     injectRoute (l:ls)

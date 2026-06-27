@@ -9,6 +9,7 @@ import qualified Commands.Deploy as DeployCmd
 import qualified Commands.Kill as Kill
 import qualified Commands.New as New
 import qualified Commands.AddPage as AddPage
+import qualified Commands.AddForm as AddForm
 import Shared (availableScaffoldTypes)
 
 data Command
@@ -19,6 +20,7 @@ data Command
     | Kill (Maybe String)
     | New String
     | AddPage (Maybe String)
+    | AddForm
     | Help (Maybe String)   -- ^ Nothing = general, Just cmd = subcommand help
 
 parseCommand :: [String] -> Either String Command
@@ -57,6 +59,9 @@ parseCommand ["add", "page"] = Right (AddPage Nothing)
 parseCommand ["add", "page", "--help"] = Right (Help (Just "add page"))
 parseCommand ["add", "page", "-h"] = Right (Help (Just "add page"))
 parseCommand ["add", "page", n] = Right (AddPage (Just n))
+parseCommand ["add", "form"] = Right AddForm
+parseCommand ["add", "form", "--help"] = Right (Help (Just "add form"))
+parseCommand ["add", "form", "-h"] = Right (Help (Just "add form"))
 parseCommand ["add", "--help"] = Right (Help (Just "add"))
 parseCommand ["add", "-h"] = Right (Help (Just "add"))
 
@@ -82,6 +87,7 @@ dispatch (Kill mp) = case mp of
     Just p  -> Kill.killPort p
 dispatch (New t) = New.newProject t
 dispatch (AddPage mn) = AddPage.addPage (fromMaybe "" mn)
+dispatch AddForm = AddForm.addForm
 
 subcommandHelp :: Maybe String -> String
 subcommandHelp Nothing = generalUsage
@@ -94,6 +100,7 @@ subcommandHelp (Just cmd) = case cmd of
     "new"         -> newHelp
     "add"         -> addHelp
     "add page"    -> addPageHelp
+    "add form"    -> addFormHelp
     _             -> "Unknown command: " ++ cmd ++ "\nRun 'lurk --help' for usage."
 
 generalUsage :: String
@@ -108,6 +115,7 @@ generalUsage = unlines
     , "  kill [port]      Kill process on port"
     , "  new <type>       Scaffold a new project"
     , "  add page [name]  Add a new page"
+    , "  add form         Add a form to a page"
     , ""
     , "Run 'lurk <command> --help' for more details on a command."
     ]
@@ -181,6 +189,19 @@ newHelp = unlines
 
 addHelp :: String
 addHelp = unlines
+    [ "Usage: lurk add <page|form>"
+    , ""
+    , "Add a new page or form to the project."
+    , ""
+    , "Subcommands:"
+    , "  page [name]   Add a new page (Locale, View, Controller, Router)"
+    , "  form          Add a form to an existing page"
+    , ""
+    , "Run 'lurk add <subcommand> --help' for more details."
+    ]
+
+addPageHelp :: String
+addPageHelp = unlines
     [ "Usage: lurk add page [name]"
     , ""
     , "Add a new page to the project."
@@ -191,5 +212,26 @@ addHelp = unlines
     , "If name is omitted, prompts for it."
     ]
 
-addPageHelp :: String
-addPageHelp = addHelp
+addFormHelp :: String
+addFormHelp = unlines
+    [ "Usage: lurk add form"
+    , ""
+    , "Interactive wizard to add a form to an existing page."
+    , ""
+    , "Prompts for:"
+    , "  - Module directory"
+    , "  - Which page to embed the form on"
+    , "  - Submission handling (redirect or flash message)"
+    , "  - Controller location"
+    , "  - Form name, honeypot field, min submit time"
+    , ""
+    , "Generates:"
+    , "  - Controller POST action with form guards"
+    , "  - Form HTML with inline styles (no Bootstrap)"
+    , "  - Route injection into Router.hs"
+    , "  - setFormLoadTime in GET action"
+    , ""
+    , "For flash messages, also generates:"
+    , "  - flashHtml helper with inline styles + auto-dismiss JS"
+    , "  - Maybe Flash parameter in view signature"
+    ]
