@@ -113,6 +113,7 @@ executable lurk
                       Commands.Kill
                       Commands.Deploy
                       Commands.New
+                      Commands.AddPage
     hs-source-dirs:   cli
     build-depends:    base ^>=4.17.2.1,
                       directory,
