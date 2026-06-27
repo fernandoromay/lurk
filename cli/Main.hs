@@ -1,16 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import System.Environment (getArgs, lookupEnv)
-import System.Process (callProcess, rawSystem, readProcess)
+import System.Environment (getArgs)
+import System.Process (callProcess, readProcess)
 import System.Directory
 import System.FilePath
 import System.IO (hPutStr, hClose)
 import System.IO.Temp (withSystemTempFile)
-import Control.Monad (filterM, when, unless)
+import Control.Monad (filterM, when)
 import Data.List (isPrefixOf, isSuffixOf, isInfixOf)
 import Data.Char (isAlphaNum, isLower, toLower, toUpper)
-import System.Info (os)
 import Data.Maybe (fromMaybe, isNothing)
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -32,6 +31,7 @@ import Data.Aeson.Types (parseMaybe)
 import Shared ( loadDotEnv, updateCabalModules, scaffoldTemplates
               , availableScaffoldTypes, promptChoice, promptCustomDir
               , promptProjectName, capitalize, normalizeName )
+import qualified Commands.Kill as Kill
 
 main :: IO ()
 main = do
@@ -41,10 +41,8 @@ main = do
         ["build"] -> buildProject
         ["deploy"] -> deployProject
         ["deploy", "--init"] -> initDeploy
-        ["kill"] -> do
-            port <- detectPort
-            killPort port
-        ["kill", port] -> killPort port
+        ["kill"] -> Kill.killCommand
+        ["kill", port] -> Kill.killPort port
         ["new", scaffoldType] -> newProject scaffoldType
         ["add", "page"] -> addPage ""
         ["add", "page", name] -> addPage name
@@ -256,46 +254,6 @@ runDeployment p mEnvContent = do
                                                     Right _ -> Log.logSuccess "Rollback successful."
                                             Right _ -> Log.logSuccess "Deployment successful!"
 
-
-killPort :: String -> IO ()
-killPort port = do
-    putStrLn $ "Killing processes holding port " ++ port ++ "..."
-    case os of
-        "mingw32" -> do
-            output <- readProcess "netstat" ["-ano"] ""
-            let matchingLines = filter (portPattern port) (lines output)
-                pids = map (last . words) matchingLines
-            mapM_ (\pid -> rawSystem "taskkill" ["/F", "/PID", pid]) pids
-        "darwin" -> do
-            pids <- readProcess "lsof" ["-t", "-i", ":" ++ port] ""
-            mapM_ (\pid -> unless (null pid) $ do
-                _ <- rawSystem "kill" ["-9", pid]
-                pure ()) (lines pids)
-        _ -> do
-            _ <- rawSystem "fuser" ["-k", port ++ "/tcp"]
-            return ()
-  where
-    portPattern p line = (":" ++ p) `isInfixOf` line
-
-detectPort :: IO String
-detectPort = do
-    loadDotEnv
-    mEnvPort <- lookupEnv "PORT"
-    case mEnvPort of
-        Just p -> pure p
-        Nothing -> do
-            exists <- doesFileExist "Config.hs"
-            if not exists
-                then pure "3000"
-                else do
-                    content <- TIO.readFile "Config.hs"
-                    let linesOfContent = T.lines content
-                        findVal = filter (\line -> "defaultPort =" `T.isInfixOf` line) linesOfContent
-                    case findVal of
-                        (line:_) -> do
-                            let val = T.strip $ snd $ T.breakOn "=" line
-                            pure $ T.unpack val
-                        [] -> pure "3000"
 
 runProject :: IO ()
 runProject = do
