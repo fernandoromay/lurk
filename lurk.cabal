@@ -79,6 +79,7 @@ library
                       filepath,
                       time,
                       wai,
+                      warp,
                       http-types,
                       bytestring,
                       haskell-src-meta,
@@ -94,6 +95,10 @@ library
                       process,
                       connection,
                       temporary
+
+    if !os(windows)
+        build-depends: unix
+
 
 executable lurk
     default-language: GHC2021
