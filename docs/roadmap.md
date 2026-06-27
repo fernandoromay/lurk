@@ -3,36 +3,35 @@
 ## Checklist
 
 ### Security & Robustness
-- [x] SMTP certificate validation — disable flag on by default (`Lurk/Email/SMTP.hs:64`)
-- [x] Log append — `writeLog` overwrites file, only last entry survives (`Lurk/Log.hs`)
-- [x] Log per-path mutex — concurrent writes to same file lose entries (`Lurk/Log.hs`)
-- [x] HTTP security headers — no X-Content-Type-Options, X-Frame-Options, etc. (`ServeStatic` middleware)
-- [x] Default error views — `error404View` / `error500View` in `Lurk.Error`
-- [x] CSRF form body cache leak — orphaned entry on 403 path (`Lurk/CSRF.hs`)
-- [x] XSS escaping — `toHtml` now escapes HTML entities
+- [x] SMTP certificate validation
+- [x] Log append — `writeLog` overwrites file
+- [x] Log per-path mutex — concurrent writes to same file lose entries
+- [x] HTTP security headers
+- [x] Default error views — `error404View` / `error500View`
+- [x] CSRF form body cache leak
+- [x] XSS escaping
 
 ### Architecture
-- [x] Clean up `formBodyCache` leak (minor — bounded caches, no security impact)
+- [x] Clean up `formBodyCache` leak
 
 ### DX & Scaffolding
-- [ ] `lurk add page [name]` — scaffold locale + view + controller + paths (designed in `scaffolding.md`)
-- [ ] `lurk add form [name]` — scaffold form endpoint + email templates (designed in `scaffolding.md`)
-- [ ] `lurk add email [name]` — scaffold email template pair (designed in `scaffolding.md`)
-- [ ] `lurk add legal [name]` — scaffold legal content page (designed in `scaffolding.md`)
+- [x] `lurk add page [name]` — scaffold locale + view + controller + route
+- [x] `lurk add form [name]` — scaffold form endpoint + email templates
+- [ ] `lurk add email [name]` — scaffold email template pair
 
 ### Logging
-- [x] Log minimum level filtering — `LogLevel` in `Config`, `newLogger` filtering
+- [x] Log minimum level filtering
 - [x] Export `LogLevel(..)`
 
 ### Features
-- [ ] Language Detection & Fallback — cookie → Accept-Language → default (designed in `important-fixes.md`)
-- [ ] `Lurk.Auth` — session-based login/logout/currentUser/requireAuth/requireRole (designed in `IDEAS.md`)
+- [x] Language Detection & Fallback
+- [ ] `Lurk.Auth` — session-based login/logout/currentUser/requireAuth/requireRole
 - [ ] Rate limiting — `ThrottleRequests` equivalent
 - [ ] `Lurk.Cache` — in-memory (TVar) + optional Redis backend
 - [ ] `Lurk.Validate` — composable field validation DSL (`require "name" |> maxLength 200 |> isEmail`)
 - [ ] `Lurk.Opaque` — bot-proof email/phone rendering (designed in `IDEAS.md`)
 - [ ] Path Parameters — dynamic URL segments for CMS-like content (`/:slug`)
-- [x] REST HTTP methods — `delete`, `put`, `patch` wrappers
+- [x] REST HTTP methods — `delete`, `put`, `patch`
 - [ ] Per-route middleware — apply auth/rate-limiting to specific routes
 - [ ] `Lurk.i18n` — date formatting, currency formatting, pluralization (`Pluralizable` ADT)
 - [ ] `Lurk.Cloudflare` Turnstile — CAPTCHA replacement (requires `http-client` dep)
@@ -57,10 +56,8 @@
 - [ ] `Lurk.Admin` — auto-generated admin dashboard from `Locales/` and `Controller/` types
 
 ### Documentation
-- [ ] CHANGELOG.md — fill before v1 release
+- [ ] CHANGELOG.md — fill on v1 release
 - [ ] Update `LURK Analysis.md` — remove completed items, add new gaps
-- [ ] Update `IDEAS.md` — correct `Lurk.Cloudflare` status (Turnstile still pending)
-- [x] Update `README.md` — add `Lurk.Log`, `Lurk.Cloudflare` to feature list
 - [ ] Update `LURK_CLI.md` — add `lurk add` commands
 
 ---
@@ -157,28 +154,53 @@
 
 ---
 
-### 5. Language Detection & Fallback
+### ~~5. Language Detection & Fallback~~ DONE
 **Blocking:** LOW — standalone feature  
 **Easiness:** MEDIUM — detection logic
 
 **Problem:** No automatic language detection. Users must use language-specific paths.
 
-**Fix:** Detection priority:
-1. Cookie/session (saved preference)
-2. `Accept-Language` header
-3. Default fallback (first enum value)
+**Fix:** New `Lurk.Language.Detect` module with composable primitives:
 
-```haskell
-detectLanguage :: (Enum lang, Bounded lang) => [lang] -> Action lang
-```
+- `detectLanguage` — convenience: cookie → Accept-Language → default (one-liner for beginners)
+- `parseAcceptLanguage` — pure parser with quality value sorting
+- `matchLanguage` — subtag-aware matching against supported languages
+- `langFromCookie` — pure cookie value → language conversion
+- `countryLang` — country code → language mapping with fallback
 
-**Files:** New `Lurk/Language/Detect.hs`
-
-**Design:** Already documented in `docs/plans/important-fixes.md:78-93` and `docs/IDEAS.md:58-81`.
+**Files:** New `Lurk/Language/Detect.hs`, new `test/LanguageSpec.hs`
 
 ---
 
-### 6. `Lurk.Auth`
+### 6. Scaffolding (`lurk add`) PARTIALLY IMPLEMENTED
+**Blocking:** LOW — DX improvement  
+**Easiness:** MEDIUM — CLI code generation, file injection
+
+**Problem:** No `lurk create` commands. Manual file creation + manual `.cabal` updates. Highest daily-use impact among DX improvements.
+
+**Fix:** `lurk add page [name]`, `lurk add form [name]`, `lurk add email [name]`.
+
+**Files:** `cli/Main.hs`
+
+**Design:** Fully designed in `docs/plans/scaffolding.md`. Implementation ready.
+
+---
+
+### 7. `Lurk.DB`
+**Blocking:** LOW — but massive gap vs competitors  
+**Easiness:** HARD — quarters of work
+
+**Problem:** No ORM, no migrations, no query builder. Laravel has Eloquent, Django has ORM.
+
+**Fix:** Type-safe database layer. Start with thin `Lurk.DB` over raw SQL with type-safe parameter binding, iterate toward code-gen from Haskell types.
+
+**Files:** New `Lurk/DB.hs`
+
+**Design:** Already described in `docs/IDEAS.md:387-399`.
+
+---
+
+### 8. `Lurk.Auth`
 **Blocking:** LOW — standalone feature. Not every app needs auth (marketing sites, blogs, APIs with external auth don't).  
 **Easiness:** MEDIUM — builds on existing sessions
 
@@ -199,7 +221,7 @@ requireRole  :: SessionStore -> Role -> Action User
 
 ---
 
-### 7. `Lurk.Cache`
+### 9. `Lurk.Cache`
 **Blocking:** LOW — standalone feature  
 **Easiness:** MEDIUM — TVar-based in-memory cache
 
@@ -219,34 +241,6 @@ cacheOr     :: CacheStore -> Text -> Int -> IO a -> IO a
 
 ---
 
-### 8. Scaffolding (`lurk add`)
-**Blocking:** LOW — DX improvement  
-**Easiness:** MEDIUM — CLI code generation, file injection
-
-**Problem:** No `lurk create` commands. Manual file creation + manual `.cabal` updates. Highest daily-use impact among DX improvements.
-
-**Fix:** `lurk add page [name]`, `lurk add form [name]`, `lurk add email [name]`, `lurk add legal [name]`.
-
-**Files:** `cli/Main.hs`
-
-**Design:** Fully designed in `docs/plans/scaffolding.md`. Implementation ready.
-
----
-
-### 9. `Lurk.DB`
-**Blocking:** LOW — but massive gap vs competitors  
-**Easiness:** HARD — quarters of work
-
-**Problem:** No ORM, no migrations, no query builder. Laravel has Eloquent, Django has ORM.
-
-**Fix:** Type-safe database layer. Start with thin `Lurk.DB` over raw SQL with type-safe parameter binding, iterate toward code-gen from Haskell types.
-
-**Files:** New `Lurk/DB.hs`
-
-**Design:** Already described in `docs/IDEAS.md:387-399`.
-
----
-
 ## Implementation Order (Recommended)
 
 ### Phase 1: Security & Robustness (v1 blockers)
@@ -258,25 +252,24 @@ cacheOr     :: CacheStore -> Text -> Int -> IO a -> IO a
 6. ~~Default error views~~
 
 ### Phase 2: DX & Scaffolding
-7. `lurk add page`
-8. `lurk add form`
-9. `lurk add email` (optional)
+7. ~~`lurk add page`~~
+8. ~~`lurk add form`~~
+9. `lurk add email`
 
 ### Phase 3: Logging Improvements
 10. ~~Export `LogLevel`~~
 11. ~~Log minimum level filtering~~
 12. ~~Logger global via OS env~~
+13. ~~Language Detection & Fallback~~
 
-### Phase 4: Features
-13. Language Detection & Fallback
-14. `Lurk.Auth`
-15. Rate limiting
+### Phase 4: Database (long-term)
+14. `Lurk.DB`
+
+### Phase 5: Features
+15. `Lurk.Auth`
 16. `Lurk.Cache`
-17. `Lurk.Validate`
-18. CHANGELOG.md
-
-### Phase 5: Database (long-term)
-20. `Lurk.DB`
+18. `Lurk.Validate`
+19. CHANGELOG.md
 
 ---
 

@@ -119,12 +119,12 @@ contextValue key = lookup key ?params
 -- Provides @?currentPath@, @?params@, and @?csrfToken@ as implicit parameters.
 -- @?lang@ comes from the calling controller's scope (via 'withLang'),
 -- not from this function — it flows directly to views.
-render :: ((?currentPath :: Text, ?params :: [(Text, Text)], ?csrfToken :: Text) => Html) -> [(Text, Text)] -> Action ()
-render viewHtml ctx = do
+render :: ((?currentPath :: Text, ?params :: [(Text, Text)], ?csrfToken :: Text) => Html) -> Action ()
+render viewHtml = do
     uri <- currentPath
     token <- csrfToken
     let ?currentPath = uri
-        ?params = ctx
+        ?params = []
         ?csrfToken = token
     html . TL.fromStrict . renderHtml $ viewHtml
 

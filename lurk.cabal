@@ -105,9 +105,17 @@ library
 executable lurk
     default-language: GHC2021
     default-extensions: OverloadedStrings
+                        TemplateHaskell
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
     main-is:          Main.hs
     other-modules:    Log
+                      Shared
+                      Commands.Run
+                      Commands.Kill
+                      Commands.Deploy
+                      Commands.New
+                      Commands.AddPage
+                      Commands.AddForm
     hs-source-dirs:   cli
     build-depends:    base ^>=4.17.2.1,
                       directory,
@@ -121,7 +129,9 @@ executable lurk
                       temporary,
                       lurk,
                       ansi-terminal,
-                      file-embed
+                      file-embed,
+                      template-haskell,
+                      transformers
 
 test-suite lurk-tests
     type:             exitcode-stdio-1.0

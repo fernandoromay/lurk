@@ -54,7 +54,7 @@ The core engine of the framework. It executes a strictly ordered pipeline to ens
 
 **Atomic Rollbacks**: If the `Activate` step fails, Lurk automatically attempts to restore the previous binary backup and restart the service, minimizing downtime.
 
-### `lurk deploy --yaml`
+### `lurk deploy init`
 **Purpose**: Configuration Bootstrapping.
 Use this to generate or update your deployment configuration file.
 
@@ -62,25 +62,19 @@ Use this to generate or update your deployment configuration file.
   - Scans `.env` or `.example.env` to identify which secrets your app needs.
   - Creates/updates `lurk.yaml` with the required `env_vars` mapping.
 
-### `lurk deploy --githubaction`
-**Purpose**: Workflow Bootstrapping.
-Use this to generate the CI/CD pipeline configuration.
-
-- **What it does**:
-  - Generates a professional GitHub Actions workflow (`.github/workflows/deploy.yml`) tailored to your chosen provider, automatically plumbing necessary authentication secrets (e.g., `DEPLOY_SSH_KEY`, `VPS_IP`, `VPS_USER`).
-
-### `lurk deploy --init`
+### `lurk deploy init --github-actions`
 **Purpose**: Full Workflow Bootstrapping.
 Use this once at the start of your project or when changing your deployment strategy.
 
 - **What it does**:
-  - Runs `lurk deploy --yaml` followed by `lurk deploy --githubaction` to fully bootstrap your deployment configuration and workflow in one command.
+  - Generates `lurk.yaml` (same as `lurk deploy init`).
+  - Generates a professional GitHub Actions workflow (`.github/workflows/deploy.yml`) tailored to your chosen provider, automatically plumbing necessary authentication secrets (e.g., `DEPLOY_SSH_KEY`, `VPS_IP`, `VPS_USER`).
 
 ### `lurk kill [port]`
 **Purpose**: Port Recovery.
 Useful when a previous process didn't shut down correctly and is blocking your port.
 - **Usage**: `lurk kill 3000` or simply `lurk kill`.
-- **What it does**: Forcefully terminates any process holding the specified TCP port across all platforms (Linux, macOS, Windows). If no port is specified, it dynamically detects the target port by checking the `PORT` environment variable, falling back to parsing `Config.hs` for `defaultPort`, and finally defaulting to `3000`.
+- **What it does**: Forcefully terminates any process holding the specified TCP port across all platforms (Linux, macOS, Windows). If no port is specified, it dynamically detects the target port by parsing the `port` value in the `Config` record in `Main.hs`. If the value is a non-numeric env var reference, it resolves it from the corresponding `.env` file. Falls back to `3000`.
 
 ### `lurk new <type>`
 **Purpose**: Project Scaffolding.
@@ -101,6 +95,86 @@ Use this to create a new Lurk project from a scaffold template.
 **Available scaffold types**: `website`
 
 ---
+
+### `lurk add page`
+**Purpose**: Page Scaffolding.
+Use this to add a new page to an existing Lurk project.
+
+- **Usage**: `lurk add page` or `lurk add page "About Us"`
+- **What it does**:
+  1. Generates a **View** module (`View/<Name>.hs`) with a `[lurk|...|]` template.
+  2. Generates a **Locale** module (`Locale/<Name>.hs`) with per-language strings.
+  3. Injects **paths** into `Paths.hs` (language-aware routes).
+  4. Injects a **controller action** into the selected controller.
+  5. Injects a **GET route** into `Router.hs`.
+
+- **Target options**: Root (`.`), `Web/` subdirectory, or custom directory. Module names are prefixed automatically (e.g., `Web.View.AboutUs`).
+- **Controller injection**: Adds `import View.<Name>` and `import Locale.<Name> qualified as <Name>`, plus the action.
+
+---
+
+### `lurk add form`
+**Purpose**: Interactive Form Scaffolding.
+The most flexible form generator in any web framework. No other framework generates a complete, type-safe form with anti-abuse guards, flash messages, CSRF protection, and correct routing in a single interactive command.
+
+- **Usage**: `lurk add form`
+- **What it does**: Walks you through a series of prompts, then generates/modifies exactly the files you need.
+
+#### Interactive Prompts
+
+| Prompt | Options | What it affects |
+|--------|---------|-----------------|
+| **Module location** | Root, `Web/`, Custom | Module prefix for all generated code |
+| **Target page** | Lists actual View files + "Multiple pages → Partial" | Where the form HTML lives |
+| **Submission handling** | Redirect to `/` or Show a message (flash) | Controller generates `redirect` or `flashSuccess` + `redirect` |
+| **Controller** | Existing `Form.hs` or custom controller | Which file gets the POST action |
+| **Form name** | Free text (e.g., `contact`) | Action name (`contactPostAction`), form function (`contactForm`) |
+| **Honeypot field** | Default: `honeypot` | Anti-bot hidden field name |
+| **Min submit time** | Default: `3` seconds | Timing guard threshold |
+
+#### What Gets Generated
+
+**Controller** (`Controller/Form.hs` or custom):
+- POST action with `validateForm` pipeline
+- Guards: honeypot, minSubmitTime, mxRecord
+- Flash success/error messages (when selected)
+- Redirect to the page where the form lives (not `/`)
+- `import Lurk.Form (setFormLoadTime)` injected automatically
+
+**View** (embedded in selected page's View or `Partial.hs`):
+
+- `[lurk|...|]` form function with `{{?csrfToken}}` implicit parameter
+- `action="{{?currentPath}}"` — posts to its own page's route
+- `{{renderFlashMaybe mFlash}}` for flash display (when selected)
+- Reusable as `{{contactForm}}` or `{{contactForm mFlash}}`
+
+**Route** (`Router.hs`):
+
+- POST route injected next to the existing GET route
+- Or route comments for Partial (attach to any page)
+
+**GET action** (in controller):
+- `setFormLoadTime` injected for timing guard
+- `mFlash <- getFlash` injected when flash is enabled
+- View call updated with `mFlash` parameter
+
+#### The Four Combinations
+
+| | Redirect | Flash |
+|---|----------|-------|
+| **Specific page** | Form function in selected View, redirect to page path | + `Maybe Flash` param, `flashHtml` helper with embedded JS |
+| **Partial** | Form function in `Partial.hs`, route comments | + `Maybe Flash` param, route comments include flash setup |
+
+#### Why This Is Different
+
+No other web framework offers this level of integrated form scaffolding:
+
+- **Laravel** (`make:form`): Generates a empty form class. No guards, no flash, no routing.
+- **Rails** (`form_for`): Generates ERB template. No anti-abuse, no CSRF setup.
+- **Django**: `startform` generates a Python class. No HTML, no routing, no guards.
+- **Next.js**: No form scaffolding at all. Manual everything.
+
+Lurk generates **all layers at once** (controller, view, route, guards, flash, CSRF) as compile-time safe code that integrates with your existing codebase. The generated code uses the same patterns you'd write by hand: `ViewCtx`, implicit params, `[lurk|...|]` quasiquoter, composable `FormGuard` pipeline.
 
 ### Provider Deep-Dive
 
@@ -144,8 +218,8 @@ Before your first deployment, ensure:
 
 ### 2. The Setup Process
 The recommended path to production:
-1. **Configure**: Define your `lurk.yaml` (or use `lurk deploy --yaml` to start).
-2. **Initialize**: Run `lurk deploy --githubaction` to generate your GitHub Action.
+1. **Configure**: Run `lurk deploy init` to generate `lurk.yaml`.
+2. **CI/CD**: Run `lurk deploy init --github-actions` to also generate your GitHub Action.
 3. **Secret Setup**: 
    - Add your SSH/Docker keys and App secrets to GitHub.
 4. **Push**: Commit your code and push to `main`. GitHub Actions will handle the rest.

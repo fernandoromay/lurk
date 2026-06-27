@@ -533,7 +533,6 @@ deploy:
 - `Lurk.Email` — HTTP-based email providers (Mailgun, SendGrid, Resend)
 - `Lurk.DB` — Database/ORM layer
 - `Lurk.WebSocket` — WebSocket support
-- `lurk create page` — CLI scaffolding
 
 ## Testing
 
