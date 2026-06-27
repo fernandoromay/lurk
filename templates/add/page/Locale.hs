@@ -1,6 +1,6 @@
-module Locale.{{PascalName}} where
+module {{ModPrefix}}Locale.{{PascalName}} where
 
-import Locale.Prelude
+import {{ModPrefix}}Locale.Prelude
 
 data {{PascalName}}Locale = {{PascalName}}Locale
     { seo :: SEO

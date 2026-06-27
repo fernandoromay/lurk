@@ -1,9 +1,9 @@
 {-# LANGUAGE RecordWildCards #-}
-module View.{{PascalName}} where
+module {{ModPrefix}}View.{{PascalName}} where
 
-import View.Prelude
-import View.Layout.Default
-import Locale.{{PascalName}}
+import {{ModPrefix}}View.Prelude
+import {{ModPrefix}}View.Layout.Default
+import {{ModPrefix}}Locale.{{PascalName}}
 
 {{camelName}}View :: ViewCtx Language => {{PascalName}}Locale -> Html
 {{camelName}}View {{PascalName}}Locale{..} = defaultLayout seo [lurk|
