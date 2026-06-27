@@ -9,7 +9,7 @@
 - **`Lurk.Form`** — Composable anti-abuse pipeline: honeypot, timing, MX verification, field length. Guards run in `Action` for session access. `withForm` orchestrates the pipeline.
 - **`Lurk.Email.SMTP`** — Self-contained SMTP client (STARTTLS/SMTPS). Zero external email library dependencies.
 - **`Lurk.Env`** — Direct OS environment access. `loadEnv`/`loadEnvFile` populate the process environment from a `.env` file at startup; `getEnv`/`requireEnv`/`hasEnv` read directly from the OS — no opaque record, no global state.
-- **`lurk deploy`** — Full deployment pipeline: build → package → transfer → activate. SSH, Docker, and Shell providers via `DeployProvider` typeclass. `--init` generates CI/CD config.
+- **`lurk deploy`** — Full deployment pipeline: build → package → transfer → activate. SSH, Docker, and Shell providers via `DeployProvider` typeclass. `deploy init` generates lurk.yaml. `deploy init --github-actions` also generates GitHub Actions workflow.
 - **`lurk run` / `lurk build` / `lurk kill`** — Dev server, build, and port management CLI commands.
 
 ## VS Code Extension (Implemented)
@@ -101,8 +101,8 @@
 | Feature         | Lurk              | Laravel            | Next.js           | Django         | Rails             |
 |-----------------|-------------------|--------------------|-------------------|----------------|-------------------|
 | CLI             | `lurk`            | `php artisan`      | `create-next-app` | `manage.py`    | `rails`           |
-| Code generators | `lurk create page`| `make:view`, etc.  | `create-next-app` | `startapp`     | `generate`        |
-| Scaffolding     | `lurk init`       | `laravel new`      | `create-next-app` | `startproject` | `rails new`       |
+| Code generators | `lurk add page`   | `make:view`, etc.  | `create-next-app` | `startapp`     | `generate`        |
+| Scaffolding     | `lurk new website`| `laravel new`      | `create-next-app` | `startproject` | `rails new`       |
 | IDE support     | GHC (HLS)         | PHPStorm/VS Code   | VS Code           | VS Code        | VS Code           |
 
 ### Performance
@@ -247,9 +247,9 @@
 
 **Why the bests are the best:** `artisan make:view`, `rails generate controller`, `django-admin startapp` — generate boilerplate with one command. Laravel has 50+ generators.
 
-**Our gap:** No `lurk create` commands. Manual file creation + manual `.cabal` updates.
+**Our gap:** Partially closed. `lurk add page` scaffolds locale + view + controller + route. `lurk new website` scaffolds full project from template.
 
-**Mitigation:** `lurk create page name` — generates `View/Name.hs`, `Locale/Name.hs`, updates `Router.hs`, registers in `.cabal`. Medium effort, high daily-use impact.
+**Mitigation:** Done for pages and project init. Form and email scaffolding still planned.
 
 ### Performance
 
@@ -286,7 +286,7 @@
 |---------------------|------|---------|---------|--------|-------|
 | Best for            | Performance, Type safety, Security | Full-stack, Ecosystem | Frontend, DX | Python devs, Admin | Startups, Convention |
 | Worst for           | Learning curve, Ecosystem | Type safety | Server resources | Performance | Performance |
-| Most asked feature  | Auth, DB, CLI | Email, Forms | Deployment | Auth, ORM | Auth, CLI |
+| Most asked feature  | Auth, DB | Email, Forms | Deployment | Auth, ORM | Auth, CLI |
 | Easiest to start    | ★★   | ★★★★    | ★★★★★   | ★★★★★  | ★★★★  |
 | Best long-term      | ★★★★★| ★★★★    | ★★★     | ★★★★   | ★★★★  |
 
@@ -314,7 +314,7 @@
 
 ## Lurk's Gaps (vs Competitors)
 
-1. **No CLI scaffolding** — Laravel has `artisan make:*`, Django has `startapp`. Lurk requires manual file creation. (Planned: `lurk create page`)
+1. **Partial CLI scaffolding** — `lurk add page` and `lurk new website` exist. Form and email generators still missing. (Planned: `lurk add form`, `lurk add email`)
 
 2. **No built-in auth** — Laravel has guards, Django has `auth`. Lurk has raw sessions. (Planned: `Lurk.Auth`)
 
@@ -334,7 +334,7 @@
 | ---- | ------------------ | ------ | ------ | ------ | ----------------------------------------- |
 | 5    | `Lurk.Cloudflare`  | Medium | High   | OPEN   | Turnstile still under development         |
 | 6    | `Lurk.Auth`        | Medium | High   | OPEN   | Every app needs auth                      |
-| 7    | `lurk create page` | High   | High   | OPEN   | CLI scaffolding, highest long-term impact |
+| 7    | `lurk add form`    | High   | High   | OPEN   | Form + email scaffolding                  |
 | 8    | `Lurk.DB`          | High+  | High+  | OPEN   | Laravel killer, but massive effort        |
 | 9    | `Lurk.Cache`       | Medium | Medium | OPEN   | Redis/file caching layer                  |
 | 10   | Rate limiting      | Low    | Medium | OPEN   | ThrottleRequests equivalent               |

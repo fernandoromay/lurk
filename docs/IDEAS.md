@@ -45,30 +45,6 @@ Pending — requires `http-client` dependency (also useful for AI tool integrati
 turnstileVerify :: Text -> Text -> IO Bool  -- CAPTCHA replacement
 ```
 
-### Language Detection & Fallback
-
-Detect language via:
-1. **Cookie/session** — Highest priority. User's saved preference persists across visits.
-2. **Browser `Accept-Language` header** — Parse and match against available languages.
-3. **Default fallback** — EN (first language in enum order).
-
-```haskell
-detectLanguage :: (Enum lang, Bounded lang) => [lang] -> Action lang
-detectLanguage available = do
-    -- 1. Check cookie/session for saved preference
-    saved <- getCookie "lang_preference"
-    case saved >>= parseLang of
-        Just lang | lang `elem` available -> pure lang
-        _ -> do
-            -- 2. Parse Accept-Language header
-            acceptLang <- lookupHeader "Accept-Language"
-            let browserLang = parseAcceptLanguage acceptLang >>= matchLang available
-            -- 3. Fallback to default
-            pure $ fromMaybe (head available) browserLang
-```
-
-Use case: `notFoundAction` can render in the user's language without requiring a language-specific path. `HomePage` can redirect to the most used language if no cookie exists.
-
 ### VS Code Error Diagnostics for Lurk Blocks
 
 Detect at edit time via Language Server or VS Code diagnostics API:
@@ -116,17 +92,6 @@ currentUser  :: SessionStore -> Action (Maybe User)
 requireAuth  :: SessionStore -> Action User
 requireRole  :: SessionStore -> Role -> Action User
 ```
-
-### `lurk create page` — CLI Scaffolding
-
-```bash
-lurk create page ViewName ControllerName
-```
-
-Generates `View/ViewName.hs`, `Locales/ViewName.hs`, creates or updates
-`Controller/ControllerName.hs`, registers in `.cabal`.
-
-Also: `lurk create view`, `lurk create controller`, `lurk create locale`.
 
 ### Path Parameters (CMS Phase)
 
