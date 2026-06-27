@@ -7,6 +7,7 @@ module Commands.Deploy
 import System.Directory (createDirectoryIfMissing)
 import System.IO (hPutStr, hClose)
 import System.IO.Temp (withSystemTempFile)
+import Control.Monad (when)
 import Data.Maybe (fromMaybe, isNothing)
 import qualified Data.Map as Map
 import qualified Data.Text as T
@@ -66,10 +67,10 @@ runDockerDeployment val mEnvContent =
         Nothing -> putStrLn "Failed to parse Docker configuration."
         Just dockerCfg -> runDeployment (DeployDocker.DockerProvider dockerCfg) mEnvContent
 
--- | Entry point for lurk deploy --init
-initCommand :: IO ()
-initCommand = do
-    putStrLn "Initializing deployment workflow..."
+-- | Entry point for lurk deploy init [--github-actions]
+initCommand :: Bool -> IO ()
+initCommand withGH = do
+    putStrLn "Initializing deployment config..."
     createDirectoryIfMissing True ".github/workflows"
     keys <- Deploy.getEnvKeysFromSource
     projectName <- Deploy.getProjectName
@@ -111,16 +112,16 @@ initCommand = do
     _ <- Deploy.saveDeployConfig "lurk.yaml" newCfg
     putStrLn $ "Generated lurk.yaml (project: " ++ projectName ++ ")"
 
-    ghcVerRes <- safeReadProcess "ghc" ["--numeric-version"]
-    cabalVerRes <- safeReadProcess "cabal" ["--numeric-version"]
-
-    case (ghcVerRes, cabalVerRes) of
-        (Left err, _) -> putStrLn $ "Error detecting GHC version: " ++ err
-        (_, Left err) -> putStrLn $ "Error detecting Cabal version: " ++ err
-        (Right ghcVer, Right cabalVer) -> do
-            let yaml = generateWorkflowYaml (Map.keys updatedVars) ghcVer cabalVer
-            TIO.writeFile ".github/workflows/deploy.yml" (T.pack yaml)
-            putStrLn "Generated .github/workflows/deploy.yml"
+    when withGH $ do
+        ghcVerRes <- safeReadProcess "ghc" ["--numeric-version"]
+        cabalVerRes <- safeReadProcess "cabal" ["--numeric-version"]
+        case (ghcVerRes, cabalVerRes) of
+            (Left err, _) -> putStrLn $ "Error detecting GHC version: " ++ err
+            (_, Left err) -> putStrLn $ "Error detecting Cabal version: " ++ err
+            (Right ghcVer, Right cabalVer) -> do
+                let yaml = generateWorkflowYaml (Map.keys updatedVars) ghcVer cabalVer
+                TIO.writeFile ".github/workflows/deploy.yml" (T.pack yaml)
+                putStrLn "Generated .github/workflows/deploy.yml"
 
 generateWorkflowYaml :: [String] -> String -> String -> String
 generateWorkflowYaml keys ghcVer cabalVer =
