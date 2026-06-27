@@ -110,6 +110,7 @@ executable lurk
     main-is:          Main.hs
     other-modules:    Log
                       Shared
+                      Commands.Run
                       Commands.Kill
                       Commands.Deploy
                       Commands.New
