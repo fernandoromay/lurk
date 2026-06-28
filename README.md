@@ -70,14 +70,26 @@ lib/lurk/
 
 ### 1. Add Lurk to your project
 
-In `cabal.project`:
-```
-packages: lib/lurk
+In your project directory:
+```bash
+git submodule add https://github.com/fernandoromay/lurk.git lib/lurk
 ```
 
-In your `.cabal` file:
-```cabal
-build-depends: lurk
+Install the CLI:
+```bash
+cd lib/lurk/
+cabal install exe:lurk
+```
+
+#### Get the latest version
+
+Lurk is under development. If it has been updated, you will need to download the latest version.
+
+Inside `lib/lurk/`:
+
+```bash
+git pull
+cabal install exe:lurk --overwrite-policy=always 2>&1
 ```
 
 ### 2. Define routes
@@ -303,7 +315,7 @@ Use **(lurk|...|)** for embedding inner HTML blocks inside `{{ }}` expressions:
 
 Parenthesis nesting tracks depth — inner blocks can contain further nested `(lurk|...|)` without escaping issues.
 
-> **Note:** `[lurk|...|]` nesting inside `{{ }}` is broken. GHC cannot parse `|]` inside `|]`. Always use `(lurk|...|)` for inner blocks.
+> **Note:** `[lurk|...|]` nesting inside `{{ }}` is not possible due to GHC constraints (It cannot parse `|]` inside `|]`). Always use `(lurk|...|)` for inner blocks.
 
 ### `forEach` / `forEachWithIndex`
 
@@ -471,20 +483,23 @@ logInfo logger "Server started" [("port", toJSON port)]
 logError logger "Connection failed" [("host", toJSON host)]
 ```
 
-Each log entry is a JSON line with `level`, `message`, `timestamp`, and optional structured fields. Entries append to the file — previous entries are preserved. The log directory is created automatically.
+Each log entry is a JSON line with `level`, `message`, `timestamp`, and optional structured fields. The log directory is created automatically.
 
 ### `Lurk.Email.SMTP`
 
 Self-contained SMTP client with no external email library dependencies:
 
 ```haskell
-sendEmail       :: SmtpConfig -> Email -> IO (Either EmailError ())  -- cert validation ON
+sendEmail         :: SmtpConfig -> Email -> IO (Either EmailError ())  -- cert validation ON
 sendEmailInsecure :: SmtpConfig -> Email -> IO (Either EmailError ())  -- cert validation OFF
+smtpConfig        :: Text -> Text -> IO (Maybe SmtpConfig)            -- load from env
 ```
 
-`sendEmail` validates TLS certificates (secure default). `sendEmailInsecure` skips validation — use only for self-signed or expired certs.
+`sendEmail` validates TLS certificates (secure default). `sendEmailInsecure` skips validation.
 
-Supports STARTTLS (port 587) and SMTPS (port 465) with automatic detection. Includes AUTH LOGIN, multi-line response parsing, and 30-second timeout.
+`smtpConfig fromEmail fromName` reads `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_ENCR` from environment. Returns `Nothing` if any required field is missing.
+
+Supports STARTTLS and SMTPS with automatic detection. Includes AUTH LOGIN, multi-line response parsing, and 30-second timeout.
 
 ### `Lurk.Deploy`
 
