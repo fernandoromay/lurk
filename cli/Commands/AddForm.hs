@@ -11,7 +11,7 @@ import Control.Monad (when, unless)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 
-import Shared (promptChoice)
+import Shared (promptChoice, capitalize)
 
 addForm :: IO ()
 addForm = do
@@ -162,10 +162,6 @@ listHsFiles dir = do
     exists <- doesDirectoryExist dir
     if not exists then pure []
     else filter (".hs" `isSuffixOf`) <$> listDirectory dir
-
-capitalize :: String -> String
-capitalize "" = ""
-capitalize (c:cs) = toUpper c : cs
 
 ----------------------------------------------------------------------
 -- CONTROLLER GENERATION

@@ -18,14 +18,18 @@ module Shared
     , splitAtImports
     , safeReadProcess
     , safeCallProcess
+    , parseLanguageConstructors
+    , scanControllers
+    , scanActions
+    , injectImport
     ) where
 
 import System.Directory (doesFileExist, doesDirectoryExist, listDirectory)
 import System.FilePath (isPathSeparator, normalise, takeFileName, dropExtension, (</>))
 import System.Process (readProcess, callProcess)
 import System.IO.Error (tryIOError, isDoesNotExistError)
-import Control.Monad (filterM)
-import Data.Char (isAsciiUpper, isAlpha, toLower, toUpper)
+import Control.Monad (filterM, unless)
+import Data.Char (isAsciiUpper, isAlpha, isAlphaNum, toLower, toUpper)
 import Data.List (isPrefixOf, isSuffixOf, sort, dropWhileEnd)
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -235,3 +239,49 @@ injectModules content modules = do
     lookupIndex query ((idx, line):xs)
         | query `T.isInfixOf` line && not ("--" `T.isPrefixOf` T.strip line) = Just idx
         | otherwise = lookupIndex query xs
+
+-- | Parse Language.hs to extract language constructors (e.g., ["EN", "ES", "KO"])
+parseLanguageConstructors :: FilePath -> IO [String]
+parseLanguageConstructors langFile = do
+    exists <- doesFileExist langFile
+    if not exists then pure [] else do
+        content <- TIO.readFile langFile
+        let isLangDef line = "data Language" `T.isPrefixOf` T.strip line
+                          || "data Language =" `T.isInfixOf` line
+        let langLines = dropWhile (not . isLangDef) (T.lines content)
+        let langBlock = takeWhile (\l -> not (T.null (T.strip l))
+                            && not ("deriving" `T.isInfixOf` l)) langLines
+        let combined = T.concat langBlock
+        let afterEq = T.drop 1 $ snd $ T.breakOn "=" combined
+        let stripped = T.filter (\c -> isAlphaNum c || c == '|') afterEq
+        let parsedLangs = map T.unpack $ T.splitOn "|" stripped
+        pure (filter (not . null) parsedLangs)
+
+-- | Scan Controller/ directory for .hs files
+scanControllers :: FilePath -> IO [String]
+scanControllers targetDir = do
+    let ctrlDir = targetDir </> "Controller"
+    exists <- doesDirectoryExist ctrlDir
+    if not exists then pure []
+    else filter (".hs" `isSuffixOf`) <$> listDirectory ctrlDir
+
+-- | Scan a controller file for Action () signatures
+scanActions :: FilePath -> IO [String]
+scanActions ctrlPath = do
+    content <- TIO.readFile ctrlPath
+    let lines' = T.lines content
+    pure [ extractActionName l | l <- lines'
+         , ":: " `T.isInfixOf` l && "Action ()" `T.isInfixOf` l ]
+  where
+    extractActionName l = takeWhile (/= ' ') (T.unpack (T.strip l))
+
+-- | Inject an import line after the last import in a file
+injectImport :: FilePath -> T.Text -> IO ()
+injectImport filePath importLine = do
+    content <- TIO.readFile filePath
+    let lines' = T.lines content
+    let hasImport = any (\l -> importLine `T.isInfixOf` l) lines'
+    unless hasImport $ do
+        let (before, impsAndAfter) = span (not . isImportLine) lines'
+        let (imps, after) = span isImportLine impsAndAfter
+        TIO.writeFile filePath (T.unlines (before ++ imps ++ [importLine] ++ after))

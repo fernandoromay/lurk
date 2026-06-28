@@ -3,7 +3,7 @@ module Commands.AddPage
     ( addPage
     ) where
 
-import System.Directory (doesDirectoryExist, listDirectory, createDirectoryIfMissing, doesFileExist)
+import System.Directory (doesDirectoryExist, createDirectoryIfMissing, doesFileExist)
 import System.FilePath ((</>), takeFileName, dropExtension)
 import Control.Monad (when)
 import Data.List (isPrefixOf, isSuffixOf)
@@ -12,7 +12,8 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Data.Text.Encoding as TE
 
-import Shared ( scaffoldTemplates, promptChoice, promptCustomDir, capitalize )
+import Shared ( scaffoldTemplates, promptChoice, promptCustomDir, capitalize
+              , parseLanguageConstructors, scanControllers, injectImport )
 
 addPage :: String -> IO ()
 addPage defaultName = do
@@ -44,11 +45,8 @@ addPage defaultName = do
 
     let modPrefix = if targetDir == "." then "" else capitalize targetDir ++ "."
 
+    ctrlFiles <- scanControllers targetDir
     let ctrlDir = targetDir </> "Controller"
-    ctrlExists <- doesDirectoryExist ctrlDir
-    ctrlFiles <- if ctrlExists
-        then filter (\f -> ".hs" `isSuffixOf` f) <$> listDirectory ctrlDir
-        else pure []
 
     targetCtrl <- if null ctrlFiles
         then do
@@ -59,19 +57,7 @@ addPage defaultName = do
             pure $ ctrlDir </> choice
 
     let langFile = targetDir </> "Language.hs"
-    langExists <- doesFileExist langFile
-    langs <- if langExists
-        then do
-            content <- TIO.readFile langFile
-            let isLangDef line = "data Language" `T.isPrefixOf` T.strip line || "data Language =" `T.isInfixOf` line
-            let langLines = dropWhile (not . isLangDef) (T.lines content)
-            let langBlock = takeWhile (\l -> not (T.null (T.strip l)) && not ("deriving" `T.isInfixOf` l)) langLines
-            let combined = T.concat langBlock
-            let afterEq = T.drop 1 $ snd $ T.breakOn "=" combined
-            let stripped = T.filter (\c -> isAlphaNum c || c == '|') afterEq
-            let parsedLangs = map T.unpack $ T.splitOn "|" stripped
-            pure (filter (not . null) parsedLangs)
-        else pure []
+    langs <- parseLanguageConstructors langFile
 
     let templatePrefix = "add/page/"
     let cleanPath = dropWhile (== '/')
@@ -129,15 +115,10 @@ addPage defaultName = do
 
             -- Inject into Controller
             when (not (null targetCtrl)) $ do
-                ctrlContent <- TIO.readFile targetCtrl
-                let cLines = T.lines ctrlContent
-                let isImport l = "import " `T.isPrefixOf` T.strip l
-                let (beforeImports, rest1) = span (not . isImport) cLines
-                let (imports, afterImports) = span isImport rest1
-                let newImports =
-                        [ T.pack $ "import " ++ modPrefix ++ "View." ++ pascalName
-                        , T.pack $ "import " ++ modPrefix ++ "Locale." ++ pascalName ++ " qualified as " ++ pascalName
-                        ]
+                let viewImport = T.pack $ "import " ++ modPrefix ++ "View." ++ pascalName
+                let localeImport = T.pack $ "import " ++ modPrefix ++ "Locale." ++ pascalName ++ " qualified as " ++ pascalName
+                injectImport targetCtrl viewImport
+                injectImport targetCtrl localeImport
 
                 let actionImpl = T.pack $ unlines
                         [ ""
@@ -145,8 +126,7 @@ addPage defaultName = do
                         , camelName ++ "Action = render $ " ++ camelName ++ "View (" ++ pascalName ++ ".locale ?lang)"
                         ]
 
-                let updatedCtrl = T.unlines (beforeImports ++ imports ++ newImports ++ afterImports) <> "\n" <> actionImpl
-                TIO.writeFile targetCtrl updatedCtrl
+                TIO.appendFile targetCtrl ("\n" <> actionImpl)
                 putStrLn $ "Updated " ++ targetCtrl
 
             -- Inject into Router.hs (always at project root)
