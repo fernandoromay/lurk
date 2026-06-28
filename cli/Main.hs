@@ -10,6 +10,7 @@ import qualified Commands.Kill as Kill
 import qualified Commands.New as New
 import qualified Commands.AddPage as AddPage
 import qualified Commands.AddForm as AddForm
+import qualified Commands.AddEmail as AddEmail
 import Shared (availableScaffoldTypes)
 
 data Command
@@ -21,6 +22,7 @@ data Command
     | New String
     | AddPage (Maybe String)
     | AddForm
+    | AddEmail (Maybe String)
     | Help (Maybe String)   -- ^ Nothing = general, Just cmd = subcommand help
 
 parseCommand :: [String] -> Either String Command
@@ -62,6 +64,10 @@ parseCommand ["add", "page", n] = Right (AddPage (Just n))
 parseCommand ["add", "form"] = Right AddForm
 parseCommand ["add", "form", "--help"] = Right (Help (Just "add form"))
 parseCommand ["add", "form", "-h"] = Right (Help (Just "add form"))
+parseCommand ["add", "email"] = Right (AddEmail Nothing)
+parseCommand ["add", "email", "--help"] = Right (Help (Just "add email"))
+parseCommand ["add", "email", "-h"] = Right (Help (Just "add email"))
+parseCommand ["add", "email", n] = Right (AddEmail (Just n))
 parseCommand ["add", "--help"] = Right (Help (Just "add"))
 parseCommand ["add", "-h"] = Right (Help (Just "add"))
 
@@ -88,6 +94,7 @@ dispatch (Kill mp) = case mp of
 dispatch (New t) = New.newProject t
 dispatch (AddPage mn) = AddPage.addPage (fromMaybe "" mn)
 dispatch AddForm = AddForm.addForm
+dispatch (AddEmail mn) = AddEmail.addEmail (fromMaybe "" mn)
 
 subcommandHelp :: Maybe String -> String
 subcommandHelp Nothing = generalUsage
@@ -101,6 +108,7 @@ subcommandHelp (Just cmd) = case cmd of
     "add"         -> addHelp
     "add page"    -> addPageHelp
     "add form"    -> addFormHelp
+    "add email"   -> addEmailHelp
     _             -> "Unknown command: " ++ cmd ++ "\nRun 'lurk --help' for usage."
 
 generalUsage :: String
@@ -116,6 +124,7 @@ generalUsage = unlines
     , "  new <type>       Scaffold a new project"
     , "  add page [name]  Add a new page"
     , "  add form         Add a form to a page"
+    , "  add email [name] Add an email template"
     , ""
     , "Run 'lurk <command> --help' for more details on a command."
     ]
@@ -189,13 +198,14 @@ newHelp = unlines
 
 addHelp :: String
 addHelp = unlines
-    [ "Usage: lurk add <page|form>"
+    [ "Usage: lurk add <page|form|email>"
     , ""
-    , "Add a new page or form to the project."
+    , "Add a new page, form, or email template to the project."
     , ""
     , "Subcommands:"
     , "  page [name]   Add a new page (Locale, View, Controller, Router)"
     , "  form          Add a form to an existing page"
+    , "  email [name]  Add an email template"
     , ""
     , "Run 'lurk add <subcommand> --help' for more details."
     ]
@@ -234,4 +244,19 @@ addFormHelp = unlines
     , "For flash messages, also generates:"
     , "  - flashHtml helper with inline styles + auto-dismiss JS"
     , "  - Maybe Flash parameter in view signature"
+    ]
+
+addEmailHelp :: String
+addEmailHelp = unlines
+    [ "Usage: lurk add email [name]"
+    , ""
+    , "Add a new email template to the project."
+    , ""
+    , "Creates:"
+    , "  View/Email/<Name>.hs    — HTML + text email templates"
+    , "  Locale/Email/<Name>.hs  — locale strings (if localized)"
+    , ""
+    , "Optionally injects into a controller for immediate use."
+    , ""
+    , "If name is omitted, prompts for it."
     ]

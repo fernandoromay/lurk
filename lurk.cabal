@@ -116,6 +116,7 @@ executable lurk
                       Commands.New
                       Commands.AddPage
                       Commands.AddForm
+                      Commands.AddEmail
     hs-source-dirs:   cli
     build-depends:    base ^>=4.17.2.1,
                       directory,
