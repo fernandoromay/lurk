@@ -7,6 +7,7 @@ module Lurk.Email.SMTP
     , EmailError(..)
     , sendEmail
     , sendEmailInsecure
+    , smtpConfig
     ) where
 
 import Control.Exception (bracket, try, throwIO, fromException, Exception, SomeException)
@@ -18,6 +19,7 @@ import Data.Text.Encoding qualified as TE
 import Data.Word (Word8)
 import Network.Connection qualified as Conn
 import System.Timeout (timeout)
+import Lurk.Env (getEnv, getEnvInt, getEnvWithDefault)
 
 -- | SMTP encryption mode
 data SmtpEncryption = Plain | StartTls | SmtpS
@@ -60,6 +62,29 @@ sendEmail = sendEmailWith False
 -- Use only when connecting to servers with self-signed or expired certs.
 sendEmailInsecure :: SmtpConfig -> Email -> IO (Either EmailError ())
 sendEmailInsecure = sendEmailWith True
+
+-- | Load SMTP configuration from environment variables.
+-- Reads @SMTP_HOST@, @SMTP_PORT@, @SMTP_USER@, @SMTP_PASS@, @SMTP_ENCR@.
+-- Returns 'Nothing' if any required field is missing.
+smtpConfig :: Text -> Text -> IO (Maybe SmtpConfig)
+smtpConfig fromEmail fromName = do
+    mHost <- getEnv "SMTP_HOST"
+    mPort <- getEnvInt "SMTP_PORT"
+    mUser <- getEnv "SMTP_USER"
+    mPass <- getEnv "SMTP_PASS"
+    mEncr <- getEnvWithDefault "SMTP_ENCR" ""
+    case (mHost, mPort, mUser, mPass) of
+        (Just h, Just p, Just u, Just pw) ->
+            pure $ Just SmtpConfig
+                { smtpHost       = h
+                , smtpPort       = p
+                , smtpUsername   = u
+                , smtpPassword   = pw
+                , smtpFrom       = fromEmail
+                , smtpFromName   = fromName
+                , smtpEncryption = mEncr
+                }
+        _ -> pure Nothing
 
 -- | Internal: core SMTP logic with cert validation toggle.
 sendEmailWith :: Bool -> SmtpConfig -> Email -> IO (Either EmailError ())
