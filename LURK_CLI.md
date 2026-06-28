@@ -176,6 +176,31 @@ No other web framework offers this level of integrated form scaffolding:
 
 Lurk generates **all layers at once** (controller, view, route, guards, flash, CSRF) as compile-time safe code that integrates with your existing codebase. The generated code uses the same patterns you'd write by hand: `ViewCtx`, implicit params, `[lurk|...|]` quasiquoter, composable `FormGuard` pipeline.
 
+### `lurk add email`
+**Purpose**: Email Template Scaffolding.
+Generates a paired HTML + plain text email view, with optional locale support and controller injection.
+
+- **Usage**: `lurk add email` or `lurk add email "Welcome"`
+- **What it does**: Walks you through a series of prompts, then generates the email template files.
+
+#### What Gets Generated
+
+**View** (`View/Email/<Name>.hs`):
+- Admin: `<Name>Fields` record with `name` and `email` fields, `name :: Fields -> Html` function
+- Thank-you: `name :: (?lang :: Language) => Text -> Html` with locale lookup
+- Plain text version (`<name>Text`) alongside HTML
+- USAGE block with import paths and `sendEmail` example (when not injecting)
+
+**Locale** (`Locale/Email/<Name>.hs`) — Thank-you only:
+- `<Name>Locale` record with `subject`, `greeting`, `body`, `signoff`
+- `locale :: Language -> <Name>Locale` with English stubs for all project languages
+
+**Controller** (when "use now" = yes):
+- `import View.Email.<Name>` injected after last import
+- Commented send block with `smtpConfig`, `sendEmail`, `Email{..}` — real imports, TODO args
+
+---
+
 ### Provider Deep-Dive
 
 #### 1. SSH Provider (Direct VPS)
