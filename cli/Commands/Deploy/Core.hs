@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Lurk.Deploy 
+module Commands.Deploy.Core
     ( DeployProvider(..)
     , DeployError(..)
     , DeployConfig(..)
@@ -57,7 +57,7 @@ getEnvKeysFromSource = do
             content <- TIO.readFile f
             pure $ map (T.unpack . T.strip . fst . T.breakOn "=") $ filter (not . T.null) $ T.lines content
 
-data DeployError 
+data DeployError
     = ConfigError String
     | ValidationError String
     | PackagingError String
@@ -67,7 +67,7 @@ data DeployError
 
 data DeployConfig = DeployConfig
     { project  :: String
-    , build    :: Value 
+    , build    :: Value
     , deploy   :: DeploySettings
     } deriving (Show, Generic)
 

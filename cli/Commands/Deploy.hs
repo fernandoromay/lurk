@@ -18,9 +18,9 @@ import qualified Data.Aeson.Key as Key
 import Data.Aeson (Value(..), parseJSON)
 import Data.Aeson.Types (parseMaybe)
 
-import qualified Lurk.Deploy as Deploy
-import qualified Lurk.Deploy.SSH as DeploySSH
-import qualified Lurk.Deploy.Docker as DeployDocker
+import qualified Commands.Deploy.Core as Deploy
+import qualified Commands.Deploy.SSH as DeploySSH
+import qualified Commands.Deploy.Docker as DeployDocker
 import qualified Log
 
 import Shared (updateCabalModules, safeReadProcess)

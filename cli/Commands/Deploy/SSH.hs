@@ -1,10 +1,10 @@
 {-# LANGUAGE DeriveGeneric #-}
-module Lurk.Deploy.SSH 
+module Commands.Deploy.SSH
     ( SSHProvider(..)
     , SSHConfig(..)
     ) where
 
-import Lurk.Deploy
+import Commands.Deploy.Core
 import GHC.Generics (Generic)
 import Data.Aeson (FromJSON, Object)
 import Data.Aeson.Types (parseMaybe)
@@ -29,14 +29,14 @@ instance DeployProvider SSHProvider where
         putStrLn "Setting up remote infrastructure..."
         -- 1. Create directory
         _ <- callProcess "ssh" [(user cfg ++ "@" ++ host cfg), "mkdir -p " ++ path cfg]
-        
+
         -- 2. Create systemd service file
         let serviceFile = "[Unit]\nDescription=" ++ service_name cfg ++ "\nAfter=network.target\n\n[Service]\nEnvironmentFile=" ++ path cfg ++ "/.env\nExecStart=" ++ path cfg ++ "/" ++ service_name cfg ++ "\nWorkingDirectory=" ++ path cfg ++ "\nRestart=always\n\n[Install]\nWantedBy=multi-user.target"
         _ <- callProcess "ssh" [(user cfg ++ "@" ++ host cfg), "echo '" ++ serviceFile ++ "' | sudo tee /etc/systemd/system/" ++ service_name cfg ++ ".service"]
-        
+
         -- 3. Reload systemd
         _ <- callProcess "ssh" [(user cfg ++ "@" ++ host cfg), "sudo systemctl daemon-reload && sudo systemctl enable " ++ service_name cfg]
-        
+
         pure $ Right ()
 
     validate (SSHProvider cfg) = do
@@ -55,11 +55,11 @@ instance DeployProvider SSHProvider where
         let binaryName = service_name cfg
         let remoteBase = user cfg ++ "@" ++ host cfg ++ ":" ++ path cfg
         let remoteBinary = remoteBase ++ "/" ++ binaryName
-        
+
         -- Create backup of existing binary on remote
         putStrLn "Creating remote backup..."
         _ <- callProcess "ssh" [(user cfg ++ "@" ++ host cfg), "[ -f " ++ path cfg ++ "/" ++ binaryName ++ " ] && mv " ++ path cfg ++ "/" ++ binaryName ++ " " ++ path cfg ++ "/" ++ binaryName ++ ".bak || true"]
-        
+
         -- 1. Transfer binary
         putStrLn "Transferring binary..."
         callProcess "rsync" ["-avz", binaryPath, remoteBinary]
@@ -67,12 +67,12 @@ instance DeployProvider SSHProvider where
         -- 2. Transfer public assets
         putStrLn "Transferring public assets..."
         callProcess "rsync" ["-avz", "public/", remoteBase ++ "/public/"]
-        
+
         -- Transfer .env if it exists
         case mEnvPath of
             Just envPath -> callProcess "rsync" ["-avz", envPath, remoteBase ++ "/.env"]
             Nothing -> putStrLn "No .env file to transfer."
-            
+
         pure $ Right ()
 
     activate (SSHProvider cfg) = do

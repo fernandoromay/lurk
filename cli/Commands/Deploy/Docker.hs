@@ -1,10 +1,10 @@
 {-# LANGUAGE DeriveGeneric #-}
-module Lurk.Deploy.Docker 
+module Commands.Deploy.Docker
     ( DockerProvider(..)
     , DockerConfig(..)
     ) where
 
-import Lurk.Deploy
+import Commands.Deploy.Core
 import GHC.Generics (Generic)
 import Data.Aeson (FromJSON)
 import System.Process (readProcessWithExitCode, callProcess)
@@ -43,7 +43,7 @@ instance DeployProvider DockerProvider where
         _ <- readProcessWithExitCode "docker" ["pull", registry cfg ++ ":latest"] ""
         _ <- callProcess "docker" ["tag", registry cfg ++ ":latest", registry cfg ++ ":previous"]
         _ <- callProcess "docker" ["push", registry cfg ++ ":previous"]
-        
+
         putStrLn $ "Pushing new image to registry: " ++ registry cfg
         callProcess "docker" ["push", registry cfg ++ ":" ++ tag cfg]
         callProcess "docker" ["push", registry cfg ++ ":latest"]
@@ -53,7 +53,7 @@ instance DeployProvider DockerProvider where
         putStrLn "Activating new container..."
         -- Remove old container if exists
         _ <- readProcessWithExitCode "docker" ["rm", "-f", "lurk-app"] ""
-        
+
         -- Run new container
         (code, _, err) <- readProcessWithExitCode "docker" ["run", "-d", "--name", "lurk-app", registry cfg ++ ":latest"] ""
         case code of

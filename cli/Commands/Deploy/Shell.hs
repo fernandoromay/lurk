@@ -1,10 +1,10 @@
 {-# LANGUAGE DeriveGeneric #-}
-module Lurk.Deploy.Shell 
+module Commands.Deploy.Shell
     ( ShellProvider(..)
     , ShellConfig(..)
     ) where
 
-import Lurk.Deploy
+import Commands.Deploy.Core
 import GHC.Generics (Generic)
 import Data.Aeson (FromJSON)
 import System.Process (readProcessWithExitCode, readProcess, callProcess)
@@ -22,7 +22,7 @@ data ShellProvider = ShellProvider ShellConfig
 instance DeployProvider ShellProvider where
     setup (ShellProvider cfg) = runStep cfg "setup" Nothing
     validate (ShellProvider cfg) = runStep cfg "validate" Nothing
-    
+
     package (ShellProvider cfg) = do
         putStrLn "Packaging project..."
         callProcess "cabal" ["build", "--minimize"]

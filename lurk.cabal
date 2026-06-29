@@ -65,10 +65,6 @@ library
                       Lurk.SEO
                       Lurk.Session
                       Lurk.Session.Middleware
-                      Lurk.Deploy
-                      Lurk.Deploy.SSH
-                      Lurk.Deploy.Docker
-                      Lurk.Deploy.Shell
 
     build-depends:
                       base >=4.17.2.1,
@@ -92,11 +88,8 @@ library
                       vault >= 0.3,
                       case-insensitive,
                       aeson,
-                      yaml,
-                      vector,
                       process,
-                      connection,
-                      temporary
+                      connection
 
     if !os(windows)
         build-depends: unix
@@ -113,6 +106,10 @@ executable lurk
                       Commands.Run
                       Commands.Kill
                       Commands.Deploy
+                      Commands.Deploy.Core
+                      Commands.Deploy.SSH
+                      Commands.Deploy.Docker
+                      Commands.Deploy.Shell
                       Commands.New
                       Commands.AddPage
                       Commands.AddForm
@@ -125,6 +122,7 @@ executable lurk
                       process,
                       aeson,
                       yaml,
+                      vector,
                       bytestring,
                       containers,
                       temporary,
