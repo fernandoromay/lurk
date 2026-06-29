@@ -17,7 +17,7 @@ Make sure the install directory is in your `PATH`. Most Haskell setups (ghcup) d
 
 **Updating**:
 ```bash
-cabal install exe:lurk
+cabal install exe:lurk --overwrite-policy=always 2>&1
 ```
 This rebuilds and replaces the existing binary with the latest version.
 

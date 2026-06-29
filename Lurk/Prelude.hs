@@ -77,6 +77,32 @@ module Lurk.Prelude
     , flashSuccess
     , flashError
     , flashWarning
+    -- Validate
+    , Validation(..)
+    , ValidationError(..)
+    , Rule
+    , field
+    , fieldMaybe
+    , required
+    , isEmail
+    , minLength
+    , maxLength
+    , numeric
+    , oneOf
+    , atLeast
+    , atMost
+    , custom
+    , matches
+    , validate
+    , validateIO
+    , runRules
+    , IOValidator
+    , noIO
+    , (<.?>)
+    , liftPred
+    , setValidationErrors
+    , validationErrors
+    , fieldErrors
     -- Env
     , loadEnv
     , loadEnvFile
@@ -94,7 +120,8 @@ import Lurk.Cookie (getCookie, setCookie, setSimpleCookie, deleteCookie)
 import Lurk.Session (SessionId, Session, sessionId, getSession, getSessionValue, setSessionValue, deleteSessionValue, destroySession)
 import Lurk.Flash (FlashLevel(..), Flash(..), setFlash, getFlash, flashSuccess, flashError, flashWarning)
 import Lurk.Env (loadEnv, loadEnvFile, getEnv, getEnvInt, getEnvBool, getEnvWithDefault, requireEnv, hasEnv)
-import Lurk.View (ViewContext(..), ViewCtx, render, currentPath, csrfToken, flash)
+import Lurk.View (ViewContext(..), ViewCtx, render, currentPath, csrfToken, flash, validationErrors, fieldErrors)
+import Lurk.Validate (Validation(..), ValidationError(..), Rule, field, fieldMaybe, required, isEmail, minLength, maxLength, numeric, oneOf, atLeast, atMost, custom, matches, validate, validateIO, runRules, IOValidator, noIO, (<.?>), liftPred, setValidationErrors)
 import Lurk.SEO
 import Lurk.App (LurkApp)
 import Lurk.Language (withLang)
