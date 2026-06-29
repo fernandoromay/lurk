@@ -6,8 +6,6 @@ module Lurk.Flash
     , flashSuccess
     , flashError
     , flashWarning
-    , renderFlash
-    , renderFlashMaybe
     ) where
 
 import Control.Concurrent.STM (readTVarIO)
@@ -18,7 +16,6 @@ import Lurk.Request (request)
 
 import Lurk.Core (Action)
 import Lurk.CSRF (getSessionIdFromHeaders)
-import Lurk.Html (Html(..))
 import Lurk.Session qualified as Session
 
 -- | Severity level for flash messages.
@@ -51,9 +48,7 @@ levelKey   = "flash_level"
 messageKey = "flash_message"
 
 currentSessionId :: Action (Maybe Session.SessionId)
-currentSessionId = do
-    req <- request
-    pure $ getSessionIdFromHeaders req
+currentSessionId = do getSessionIdFromHeaders <$> request
 
 ----------------------------------------------------------------------
 -- CORE API
@@ -107,24 +102,3 @@ flashError = setFlash FlashError
 -- | Set a warning flash message.
 flashWarning :: Text -> Action ()
 flashWarning = setFlash FlashWarning
-
-----------------------------------------------------------------------
--- VIEW HELPERS
-----------------------------------------------------------------------
-
--- | Render a flash message as a Bootstrap alert div.
-renderFlash :: Flash -> Html
-renderFlash flash = Html $
-    "<div class=\"alert " <> alertClass (flashLevel flash) <> " alert-dismissible fade show\" role=\"alert\">"
-    <> flashMessage flash
-    <> "<button type=\"button\" class=\"btn-close\" data-bs-dismiss=\"alert\" aria-label=\"Close\"></button>"
-    <> "</div>"
-  where
-    alertClass FlashSuccess = "alert-success"
-    alertClass FlashError   = "alert-danger"
-    alertClass FlashWarning = "alert-warning"
-
--- | Render a flash message if present, or empty HTML.
-renderFlashMaybe :: Maybe Flash -> Html
-renderFlashMaybe Nothing  = ""
-renderFlashMaybe (Just f) = renderFlash f
