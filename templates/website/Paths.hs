@@ -1,6 +1,6 @@
 module Paths where
 
-import Lurk.Prelude (Text)
+import Lurk.Prelude (ViewContext, Text)
 import Language
 
 domain :: Text
@@ -10,5 +10,5 @@ homePath :: Language -> Text
 homePath EN = "/"
 homePath ES = "/es/"
 
-pageAlts :: (?currentPath :: Text) => [(Text, Text)]
+pageAlts :: (?ctx :: ViewContext) => [(Text, Text)]
 pageAlts = langPaths [homePath]

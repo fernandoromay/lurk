@@ -1,6 +1,5 @@
 module Lurk.Routes
-    ( currentPath
-    , isSubpath
+    ( isSubpath
     , trailingSlash
     , RouteOption(..)
     , routeSettings
@@ -49,9 +48,6 @@ import Web.Scotty qualified as Scotty
 --   Wraps Scotty's redirect which expects lazy 'Text'.
 redirect :: Text -> Action a
 redirect = Lurk.Core.redirect . TL.fromStrict
-
-currentPath :: Action T.Text
-currentPath = TE.decodeUtf8 . rawPathInfo <$> request
 
 isSubpath :: T.Text -> T.Text -> Bool
 isSubpath = T.isPrefixOf

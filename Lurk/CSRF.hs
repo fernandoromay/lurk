@@ -1,12 +1,12 @@
 module Lurk.CSRF
     ( CsrfToken
     , newCsrfToken
+    , fetchCsrfToken
     , setCsrfToken
     , getCsrfToken
     , validateCsrfToken
     , csrfMiddleware
     , getSessionIdFromHeaders
-    , csrfToken
     ) where
 
 import Control.Concurrent.STM
@@ -42,8 +42,8 @@ lookupCachedFormParam :: Text -> [(Text, Text)] -> Maybe Text
 lookupCachedFormParam = lookup
 
 -- | Automatically retrieve the CSRF token from the current Request Vault
-csrfToken :: Action Text
-csrfToken = do
+fetchCsrfToken :: Action Text
+fetchCsrfToken = do
     req <- request
     case getSessionIdFromHeaders req of
         Nothing -> pure ""

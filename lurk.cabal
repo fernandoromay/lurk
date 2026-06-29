@@ -65,6 +65,7 @@ library
                       Lurk.SEO
                       Lurk.Session
                       Lurk.Session.Middleware
+                      Lurk.View
 
     build-depends:
                       base >=4.17.2.1,

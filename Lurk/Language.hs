@@ -13,6 +13,7 @@ import Data.Char qualified as C (toLower)
 import Data.Text (Text, pack, replace, toLower)
 import Data.List (find)
 import Data.Maybe (fromMaybe)
+import Lurk.View (ViewContext, currentPath)
 
 allLanguages :: (Enum lang, Bounded lang) => [lang]
 allLanguages = [minBound..maxBound]
@@ -27,13 +28,13 @@ toText = pack . formatLanguage . show . toConstr
 formatLanguage :: String -> String
 formatLanguage = map (\c -> if c == '_' then '-' else C.toLower c)
 
-langPaths :: (Data lang, Enum lang, Bounded lang, ?currentPath :: Text) => [lang -> Text] -> [(Text, Text)]
+langPaths :: (Data lang, Enum lang, Bounded lang, ?ctx :: ViewContext) => [lang -> Text] -> [(Text, Text)]
 langPaths = go
   where
     langs = allLanguages
-    go [] = [(toText lang, ?currentPath) | lang <- langs]
+    go [] = [(toText lang, currentPath) | lang <- langs]
     go (fn : rest)
-        | any (\lang -> fn lang == ?currentPath) langs = [(toText lang, fn lang) | lang <- langs]
+        | any (\lang -> fn lang == currentPath) langs = [(toText lang, fn lang) | lang <- langs]
         | otherwise = go rest
 
 -- | Bind a language value to the implicit @?lang@ parameter.

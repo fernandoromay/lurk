@@ -1,5 +1,6 @@
 module Lurk.Request
     ( preferredLanguages
+    , fetchCurrentPath
     , clientIp
     , ipChain
     , parseIpChain
@@ -24,6 +25,11 @@ preferredLanguages = do
     case lookup hAcceptLanguage headers of
         Nothing -> pure []
         Just val -> pure $ map (T.takeWhile (/= ';') . T.strip) $ T.splitOn "," (TE.decodeUtf8 val)
+
+
+-- | Get the current request path (e.g. "/about", "/products/123").
+fetchCurrentPath :: Action T.Text
+fetchCurrentPath = TE.decodeUtf8 . Wai.rawPathInfo <$> request
 
 -- | Parse a comma-separated header value into a list of IPs.
 -- Strips whitespace from each entry.

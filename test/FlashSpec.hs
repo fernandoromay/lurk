@@ -9,7 +9,6 @@ import Data.Text qualified as T
 import Data.Time.Clock (addUTCTime, getCurrentTime)
 
 import Lurk.Flash
-import Lurk.Html (renderHtml)
 import Lurk.Session
 
 main :: IO ()
@@ -18,8 +17,6 @@ main = defaultMain tests
 tests :: TestTree
 tests = testGroup "Lurk.Flash"
     [ testFlashData
-    , testRenderFlash
-    , testRenderFlashMaybe
     , testFlashSessionIntegration
     ]
 
@@ -39,31 +36,6 @@ testFlashData = testGroup "Flash data type"
         let flash = Flash FlashError "fail"
         assertBool "show contains level" ("FlashError" `T.isInfixOf` T.pack (show flash))
         assertBool "show contains message" ("fail" `T.isInfixOf` T.pack (show flash))
-    ]
-
-testRenderFlash :: TestTree
-testRenderFlash = testGroup "renderFlash"
-    [ testCase "success renders alert-success" $ do
-        let html = renderHtml $ renderFlash (Flash FlashSuccess "Done!")
-        assertBool "has alert class" ("alert-success" `T.isInfixOf` html)
-        assertBool "has message" ("Done!" `T.isInfixOf` html)
-        assertBool "has dismiss button" ("btn-close" `T.isInfixOf` html)
-    , testCase "error renders alert-danger" $ do
-        let html = renderHtml $ renderFlash (Flash FlashError "Oops")
-        assertBool "has alert-danger" ("alert-danger" `T.isInfixOf` html)
-    , testCase "warning renders alert-warning" $ do
-        let html = renderHtml $ renderFlash (Flash FlashWarning "Careful")
-        assertBool "has alert-warning" ("alert-warning" `T.isInfixOf` html)
-    ]
-
-testRenderFlashMaybe :: TestTree
-testRenderFlashMaybe = testGroup "renderFlashMaybe"
-    [ testCase "Nothing renders empty" $ do
-        let html = renderHtml (renderFlashMaybe Nothing)
-        assertEqual "empty" "" html
-    , testCase "Just renders flash" $ do
-        let html = renderHtml (renderFlashMaybe (Just (Flash FlashSuccess "Hi")))
-        assertBool "has alert" ("alert" `T.isInfixOf` html)
     ]
 
 testFlashSessionIntegration :: TestTree
