@@ -53,12 +53,12 @@ parseParam key fd = do
 
 -- | Run a pipeline of guards on cached form data. On the first failure,
 --   the guard's fallback action has already executed and short-circuited
---   (e.g. via 'redirect'). On success, returns the validated 'FormData'.
-validateForm :: [FormGuard] -> Action FormData
-validateForm guards = do
+--   (e.g. via 'redirect'). On success, returns the guarded 'FormData'.
+runGuards :: [FormGuard] -> Action FormData
+runGuards guards = do
     params <- readCachedParams
     let fd = FormData params
-    runGuards guards fd
+    go guards fd
   where
     readCachedParams = do
         req <- request
@@ -66,12 +66,12 @@ validateForm guards = do
             Nothing -> pure []
             Just sid -> liftIO $ getCachedFormParams sid
 
-    runGuards [] fd = pure fd
-    runGuards (g:gs) fd = do
+    go [] fd = pure fd
+    go (g:gs) fd = do
         result <- g fd
         case result of
             Left ()  -> pure fd   -- unreachable: fallback called redirect
-            Right fd' -> runGuards gs fd'
+            Right fd' -> go gs fd'
 
 ----------------------------------------------------------------------
 -- BUILT-IN GUARDS

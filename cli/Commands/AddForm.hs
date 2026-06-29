@@ -198,7 +198,7 @@ createController ctrlPath modPrefix actionName honeypotField minTime useFlash re
             , ""
             , actionName ++ " :: (?lang :: Language) => Action ()"
             , actionName ++ " = do"
-            , "    fd <- validateForm"
+            , "    fd <- runGuards"
             , "        (map ($ " ++ guardRedirect ++ ")"
             , "            [ honeypot \"" ++ honeypotField ++ "\""
             , "            , minSubmitTime " ++ minTime
@@ -255,7 +255,7 @@ appendController ctrlPath modPrefix actionName honeypotField minTime useFlash re
             [ ""
             , actionName ++ " :: (?lang :: Language) => Action ()"
             , actionName ++ " = do"
-            , "    fd <- validateForm"
+            , "    fd <- runGuards"
             , "        (map ($ " ++ guardRedirect ++ ")"
             , "            [ honeypot \"" ++ honeypotField ++ "\""
             , "            , minSubmitTime " ++ minTime
