@@ -8,63 +8,19 @@ Lurk compiles your entire application—including HTML templates and multi-langu
 
 ## Features
 
-- **`[lurk|...|]` Quasiquoter** — HTML templates with compile-time variable checking. Typos are build errors, not runtime blanks.
-- **Type-safe i18n** — Missing translations are compile errors. Routes are generated for all languages in one call. Implicit `?lang` parameter eliminates manual threading.
-- **Session + CSRF** — File-backed sessions with automatic CSRF validation on POST routes. Secure cookies in production, atomic file writes, session ID validation.
-- **`Lurk.Flash`** — One-time session-based messages for success/error feedback.
-- **`Lurk.Form`** — Composable anti-abuse pipeline: honeypot, timing, MX verification, field length. Guards run in `Action` for session access.
-- **`Lurk.Email.SMTP`** — Self-contained SMTP client (STARTTLS/SMTPS). Zero external email library dependencies.
-- **`Lurk.Routes.Security`** — HTTP security headers middleware (X-Content-Type-Options, X-Frame-Options, HSTS, etc.). Merge API for overrides.
-- **`Lurk.Error`** — Default 404/500 error views (self-contained HTML). Exception middleware catches unhandled errors automatically.
-- **`Lurk.Log`** — Structured JSON logging with `Logger` record, per-level helpers, file output, and configurable minimum log level.
-- **Environment** — Direct OS environment access via `getEnv`/`requireEnv`/`hasEnv`. Reads `.env` at startup with `loadEnv`.
-- **Deployment** — `lurk deploy` builds a binary and deploys it via SSH, Docker, or custom shell scripts.
-- **Static assets** — `mkAssetPath` for fingerprinted asset URLs.
-- **SEO** — Structured data types for title, meta, canonical, OpenGraph, structured data.
-
-## Project Structure
-
-```
-lib/lurk/
-├── Lurk/
-│   ├── Prelude.hs        # Re-exports everything you need (Html, Action, etc.)
-│   ├── App.hs            # runLurk — starts the Warp server
-│   ├── QQ.hs             # [lurk|...|] quasiquoter (Template Haskell)
-│   ├── Html.hs           # Html type, renderHtml, ToHtml class
-│   ├── Flash.hs          # Flash messages (one-time session data)
-│   ├── Form.hs           # FormData, FormGuard, withForm, built-in guards
-│   ├── Routes.hs         # redirect, currentPath, trailingSlash
-│   ├── Request.hs        # Request helpers (params, headers, cookies)
-│   ├── Cloudflare.hs     # Typed Cloudflare headers (country, bot score, etc.)
-│   ├── Env.hs            # loadEnv, getEnv, requireEnv
-│   ├── Log.hs            # Structured JSON logging (LogLevel, Logger, level filtering)
-│   ├── Session.hs        # File-backed session store (TVar) with destroySession
-│   ├── Session/
-│   │   └── Middleware.hs  # WAI middleware for session handling (Secure flag, eager expiry)
-│   ├── CSRF.hs           # CSRF token generation and validation
-│   ├── Cookie.hs         # Cookie helpers
-│   ├── SEO.hs            # SEO data types (title, meta, OG, structured data)
-│   ├── Assets.hs         # mkAssetPath, fingerprinted asset URLs
-│   ├── Language.hs        # Language type, withLang, allLanguages, toText
-│   ├── Email/
-│   │   └── SMTP.hs       # Self-contained SMTP client (STARTTLS/SMTPS)
-│   ├── Deploy.hs         # DeployProvider typeclass
-│   └── Deploy/
-│       ├── SSH.hs        # SSH deployment provider
-│       ├── Docker.hs     # Docker deployment provider
-│       └── Shell.hs      # Shell command runner
-├── cli/
-│   └── Main.hs           # `lurk` CLI (deploy, build, run, kill)
-├── test/
-│   ├── Main.hs
-│   ├── SessionSpec.hs
-│   ├── CSRFSpec.hs
-│   ├── FlashSpec.hs
-│   ├── SMTPSpec.hs
-│   └── QQSpec.hs
-├── lurk.cabal
-└── CHANGELOG.md
-```
+- **`[lurk|...|]` Quasiquoter:** HTML templates with compile-time variable checking. Typos are build errors, not runtime blanks.
+- **Type-safe i18n:** Missing translations are compile errors. Routes are generated for all languages in one call. Implicit `?lang` parameter eliminates manual threading.
+- **Session + CSRF:** File-backed sessions with automatic CSRF validation on POST routes. Secure cookies in production, atomic file writes, session ID validation.
+- **`Lurk.Flash`:** One-time session-based messages for success/error feedback.
+- **`Lurk.Form`:** Composable anti-abuse pipeline: honeypot, timing, MX verification, field length. Guards run in `Action` for session access.
+- **`Lurk.Email.SMTP`:** Self-contained SMTP client (STARTTLS/SMTPS). Zero external email library dependencies.
+- **`Lurk.Routes.Security`:** HTTP security headers middleware (X-Content-Type-Options, X-Frame-Options, HSTS, etc.). Merge API for overrides.
+- **`Lurk.Error`:** Default 404/500 error views (self-contained HTML). Exception middleware catches unhandled errors automatically.
+- **`Lurk.Log`:** Structured JSON logging with `Logger` record, per-level helpers, file output, and configurable minimum log level.
+- **Environment:** Direct OS environment access via `getEnv`/`requireEnv`/`hasEnv`. Reads `.env` at startup with `loadEnv`.
+- **Deployment:** `lurk deploy` builds a binary and deploys it via SSH, Docker, or custom shell scripts.
+- **Static assets:** `mkAssetPath` for fingerprinted asset URLs.
+- **SEO:** Structured data types for title, meta, canonical, OpenGraph, structured data.
 
 ## Quick Start
 
@@ -135,7 +91,7 @@ Variables are checked at compile time. A typo like `{{heroTitel}}` fails the bui
 ```haskell
 contactPostAction :: (?lang :: Language) => Action ()
 contactPostAction = do
-    fd <- validateForm
+    fd <- runGuards
         [ honeypot "b_website" (redirect "/404/")
         , minSubmitTime 3 (redirect "/404/")
         , mxRecord "email" (redirect "/404/")
@@ -148,7 +104,7 @@ contactPostAction = do
     redirect "/thanks/"
 ```
 
-Guards run in sequence. First failure triggers the fallback action and short-circuits. `validateForm` returns validated `FormData` on success.
+Guards run in sequence. First failure triggers the fallback action and short-circuits. `runGuards` returns validated `FormData` on success.
 
 ### 5. Load environment config
 
@@ -258,7 +214,7 @@ navbar = [lurk|...{{navbarLocale ?lang}}...|]
 `ViewCtx` expands to:
 
 ```haskell
-type ViewCtx lang = (?currentPath :: Text, ?params :: [(Text, Text)], ?lang :: lang, ?csrfToken :: Text)
+type ViewCtx lang = (?ctx :: ViewContext, ?lang)
 ```
 
 The `lang` type variable is polymorphic — use your own language type. Single-language projects work unchanged: `data Language = EN deriving (Eq, Enum, Bounded)`.
@@ -269,9 +225,9 @@ The `lang` type variable is polymorphic — use your own language type. Single-l
 Router:     get homePath homeAction
               └─ binds ?lang for each language (EN, ES, KO)
 Controller: homeAction  (?lang :: Language => Action ())
-              └─ calls render, which binds ?currentPath, ?params, ?csrfToken
+              └─ calls render, which populates ?ctx :: ViewContext
 View:       homeView  (ViewCtx Language => Html)
-              └─ renders with ?lang, ?currentPath, ?params, ?csrfToken in scope
+              └─  renders with ?lang and ?ctx in scope
 ```
 
 ### `[lurk|...|]` Quasiquoter
@@ -392,26 +348,13 @@ Automatic CSRF protection on POST routes. Tokens are generated per-session and v
 One-time session-based messages:
 
 ```haskell
+-- Set flash messages (stored in session)
 flashSuccess "Saved!"
 flashError   "Something went wrong"
 flashWarning "Please review"
-flash        Custom "text" "Custom level message"
-msg <- getFlash :: Action (Maybe Flash)
-```
 
-Convenience helpers:
-
-```haskell
-onFlashSuccess :: Text -> Action ()
-onFlashError   :: Text -> Action ()
-onFlashWarning :: Text -> Action ()
-```
-
-Rendering with auto-dismiss:
-
-```haskell
-renderFlash :: Flash -> Html    -- includes auto-dismiss after 5s
-renderFlashMaybe :: Action Html  -- renders or empty
+-- Access in views via ViewContext
+flash :: (?ctx :: ViewContext) => Maybe Flash
 ```
 
 ### `Lurk.Form`
@@ -420,7 +363,7 @@ Composable form processing with built-in security guards:
 
 ```haskell
 -- Run guards and return validated data
-validateForm :: [FormGuard] -> Action FormData
+runGuards :: [FormGuard] -> Action FormData
 
 -- Extraction helpers
 getParam       :: Text -> FormData -> Maybe Text
@@ -555,7 +498,7 @@ deploy:
 cabal test lurk-tests
 ```
 
-Tests cover session management (file-backed store, atomic writes, cleanup), CSRF token handling, flash messages (data types, rendering, session integration), SMTP error handling, and QQ parser correctness (string literals, single braces, implicit params, nested lurks).
+Tests cover session management (file-backed store, atomic writes, cleanup), CSRF token handling, flash messages (data types, session integration), SMTP error handling, and QQ parser correctness (string literals, single braces, implicit params, nested lurks).
 
 ## License
 

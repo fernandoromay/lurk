@@ -6,12 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-### Changed
-- Move `Lurk.Deploy`, `Lurk.Deploy.*` from library to CLI 
-- Rename `validateForm` → `runGuards` for consistency with `FormGuard` type
-
-## [0.1.0.0] - 2026-06-28
-
 Initial release.
 
 ### Added
