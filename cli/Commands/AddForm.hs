@@ -89,17 +89,8 @@ addForm = do
     let actionName = formName ++ "PostAction"
     let formFnName = formName ++ "Form"
 
-    putStrLn ""
-    putStrLn "Honeypot field name [honeypot]:"
-    putStr "> "
-    honeypotInput <- getLine
-    let honeypotField = if null honeypotInput then "honeypot" else honeypotInput
-
-    putStrLn ""
-    putStrLn "Min submit time in seconds [3]:"
-    putStr "> "
-    minTimeInput <- getLine
-    let minTime = if null minTimeInput then "3" else minTimeInput
+    let honeypotField = "honeypot"
+    let minTime = "3"
 
     putStrLn ""
     putStrLn "Generating files..."
