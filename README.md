@@ -24,7 +24,7 @@ Lurk compiles your entire application—including HTML templates and multi-langu
 
 ## Quick Start
 
-### 1. Add Lurk to your project
+### 1. Install Lurk
 
 In your project directory:
 ```bash
@@ -37,105 +37,44 @@ cd lib/lurk/
 cabal install exe:lurk
 ```
 
-#### Get the latest version
-
-Lurk is under development. If it has been updated, you will need to download the latest version.
-
-Inside `lib/lurk/`:
-
+Update to latest:
 ```bash
+cd lib/lurk/
 git pull
 cabal install exe:lurk --overwrite-policy=always 2>&1
 ```
 
-### 2. Define routes
+### 2. Create a project
 
-```haskell
-module Router where
-
-import Lurk.Prelude
-import Lurk.App
-
-router :: LurkApp
-router = do
-    routeSettings [ TrailingSlashes, ForceSSL, ServeStatic "public" ]
-    get homePath homeAction
-    post contactPath contactPostAction
-    notFound notFoundAction
+```bash
+lurk new website
 ```
 
-### 3. Write views with `[lurk|...|]`
+### 3. Run it
 
-```haskell
-homeView :: ViewCtx Language => Locale -> Html
-homeView locale = defaultLayout seo [lurk|
-  <html lang="{{toText ?lang}}">
-  <body>
-    <h1>{{heroTitle}}</h1>
-    <a href="{{ctaLink}}">{{ctaText}}</a>
-  </body>
-  </html>
-|]
-  where
-    heroTitle = case ?lang of
-      EN -> "Hello World"
-      ES -> "Hola Mundo"
-    ctaText = locale.ctaText
-    ctaLink = locale.ctaLink
+```bash
+lurk run
 ```
 
-Variables are checked at compile time. A typo like `{{heroTitel}}` fails the build.
+Starts the dev server at the port defined in your `Config`.
 
-### 4. Handle forms
+### 4. Add a page
 
-```haskell
-contactPostAction :: (?lang :: Language) => Action ()
-contactPostAction = do
-    fd <- runGuards
-        [ honeypot "b_website" (redirect "/404/")
-        , minSubmitTime 3 (redirect "/404/")
-        , mxRecord "email" (redirect "/404/")
-        , maxLength "name" 200 (redirect "/404/")
-        ]
-
-    let name  = getParamDef "name" "" fd
-        email = getParamDef "email" "" fd
-    -- Process form...
-    redirect "/thanks/"
+```bash
+lurk add page "About"
 ```
 
-Guards run in sequence. First failure triggers the fallback action and short-circuits. `runGuards` returns validated `FormData` on success.
+Generates `View/About.hs` and `Locale/About.hs`, injects paths, controller action, and GET route.
 
-### 5. Load environment config
+### 5. Add a form
 
-Lurk expects `.env` in the project root. Load it in `Main.hs`:
-
-```haskell
-module Main where
-
-import Lurk.App
-import Lurk.Env (loadEnv)
-import Paths qualified as P (domain)
-import Router (router)
-
-loadConfig :: IO Config
-loadConfig = do
-    pure Config
-        { port          = 3000
-        , domain        = P.domain
-        , sessionMaxAge = Nothing
-        , sessionIdle   = Nothing
-        , minLogLevel   = LevelInfo
-        }
-
-main :: IO ()
-main = do
-    loadEnv -- Reads .env file in root directory
-    -- For a different env file use: loadEnvFile "path/to/file.env"
-    cfg <- loadConfig
-    putStrLn $ "Starting on http://localhost:" ++ show (port cfg)
-    runLurk cfg router
+```bash
+lurk add form
 ```
+
+Interactive scaffolding that generates controller, view, route, guards, flash, and CSRF — all layers at once.
+
+---
 
 ## Core API
 
@@ -147,117 +86,29 @@ Re-exports everything needed for a typical web app:
 import Lurk.Prelude  -- Html, Action, Text, getEnv, render, redirect, etc.
 ```
 
-### `get` / `post` / `delete` / `put` / `patch`
+### Routes
 
 Register routes for all languages. The action receives `?lang` implicitly:
 
 ```haskell
-get :: (Enum lang, Bounded lang)
-    => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
-post :: (Enum lang, Bounded lang)
-     => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
-delete :: (Enum lang, Bounded lang)
-       => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
-put :: (Enum lang, Bounded lang)
-    => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
-patch :: (Enum lang, Bounded lang)
-      => (lang -> Text) -> ((?lang :: lang) => Action ()) -> LurkApp
+get homePath homeAction
+post contactPath contactPostAction
 ```
 
-`getSubset`/`postSubset` etc. are available for edge cases (explicit language lists):
-
-```haskell
-getSubset :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
-postSubset :: [lang] -> (lang -> Text) -> (lang -> Action ()) -> LurkApp
-```
-
-`getSingle`/`postSingle` etc. register a single route without language:
-
-```haskell
-getSingle :: Text -> Action () -> LurkApp
-postSingle :: Text -> Action () -> LurkApp
-deleteSingle :: Text -> Action () -> LurkApp
-putSingle :: Text -> Action () -> LurkApp
-patchSingle :: Text -> Action () -> LurkApp
-```
-
-### Implicit Language (`?lang`)
-
-Lurk uses Haskell's `ImplicitParams` to thread language through your app without explicit parameters. Define your language type with `Enum` and `Bounded`:
-
-```haskell
-data Language = EN | ES | KO
-    deriving (Eq, Enum, Bounded)
-```
-
-`get`/`post` bind `?lang` automatically. Controllers and views access it implicitly:
-
-```haskell
--- Controller: ?lang comes from the router
-homeAction :: (?lang :: Language) => Action ()
-homeAction = render $ homeView (locale ?lang)
-
--- View: uses ViewCtx for the full implicit context
-homeView :: ViewCtx Language => Locale -> Html
-homeView locale = defaultLayout seo [lurk|
-  <html lang="{{toText ?lang}}">
-    {{navbar}}
-    ...
-  </html>
-|]
-
--- Partial: no explicit lang parameter
-navbar :: ViewCtx Language => Html
-navbar = [lurk|...{{navbarLocale ?lang}}...|]
-```
-
-`ViewCtx` expands to:
-
-```haskell
-type ViewCtx lang = (?ctx :: ViewContext, ?lang)
-```
-
-The `lang` type variable is polymorphic — use your own language type. Single-language projects work unchanged: `data Language = EN deriving (Eq, Enum, Bounded)`.
-
-### Flow
-
-```
-Router:     get homePath homeAction
-              └─ binds ?lang for each language (EN, ES, KO)
-Controller: homeAction  (?lang :: Language => Action ())
-              └─ calls render, which populates ?ctx :: ViewContext
-View:       homeView  (ViewCtx Language => Html)
-              └─  renders with ?lang and ?ctx in scope
-```
+`getSubset`/`postSubset` register a subset of languages. `getSingle`/`postSingle` register a single route without language.
 
 ### `[lurk|...|]` Quasiquoter
 
-Compile-time HTML templates with `{{expr}}` interpolation. Expressions inside `{{ }}` are full Haskell — not just variables:
+Compile-time HTML templates with `{{expr}}` interpolation. Expressions inside `{{ }}` are full Haskell:
 
 ```haskell
 [lurk|
   <div class="{{cssClass}}">{{title}}</div>
   <p>{{T.toUpper name}}</p>
-  <span>{{show price <> " USD"}}</span>
 |]
 ```
 
-Multi-line expressions work too:
-
-```haskell
-[lurk|
-  <div>
-    {{case lang of
-      EN -> "Hello"
-      ES -> "Hola"
-      KO -> "안녕하세요"}}
-  </div>
-|]
-```
-
-### Nested Quasiquoters
-
-Use **(lurk|...|)** for embedding inner HTML blocks inside `{{ }}` expressions:
+Use **(lurk|...|)** for inner HTML blocks:
 
 ```haskell
 [lurk|
@@ -269,86 +120,55 @@ Use **(lurk|...|)** for embedding inner HTML blocks inside `{{ }}` expressions:
 |]
 ```
 
-Parenthesis nesting tracks depth — inner blocks can contain further nested `(lurk|...|)` without escaping issues.
+> **Note:** `[lurk|...|]` nesting inside `{{ }}` is not possible due to GHC constraints. Always use `(lurk|...|)` for inner blocks.
 
-> **Note:** `[lurk|...|]` nesting inside `{{ }}` is not possible due to GHC constraints (It cannot parse `|]` inside `|]`). Always use `(lurk|...|)` for inner blocks.
+### Implicit Language (`?lang`)
 
-### `forEach` / `forEachWithIndex`
-
-Convenience aliases for rendering lists:
+Lurk uses Haskell's `ImplicitParams` to thread language through your app. Define your language type with `Enum` and `Bounded`:
 
 ```haskell
-forEach :: Foldable t => t a -> (a -> Html) -> Html
-forEachWithIndex :: Foldable t => t a -> (Int -> a -> Html) -> Html
+data Language = EN | ES | KO
+    deriving (Eq, Enum, Bounded)
 ```
 
-`forEach` is just `flip foldMap`. `forEachWithIndex` passes a 1-based index:
+`get`/`post` bind `?lang` automatically. Controllers and views access it implicitly:
 
 ```haskell
-[lurk|
-  <div>
-    {{forEach items (\item -> (lurk|
-      <div class="card">{{item.title}}</div>
-    |))}}
-  </div>
+-- Controller
+homeAction :: (?lang :: Language) => Action ()
+homeAction = render $ homeView (locale ?lang)
 
-  <ol>
-    {{forEachWithIndex items (\i item -> (lurk|
-      <li>{{show i <> ". " <> item.title}}</li>
-    |))}}
-  </ol>
+-- View
+homeView :: ViewCtx Language => Locale -> Html
+homeView locale = defaultLayout seo [lurk|
+  <html lang="{{toText ?lang}}">
+    ...
+  </html>
 |]
 ```
 
-### `renderHtml`
-
-Renders HTML to `Text` (for email templates, etc.):
+`ViewCtx` expands to:
 
 ```haskell
-html <- renderHtml [lurk|<p>Hello {{name}}</p>|]
-```
-
-### `Lurk.Env`
-
-Environment access that reads directly from the OS process environment.
-`loadEnv`/`loadEnvFile` must be called at startup to populate it from a `.env` file:
-
-```haskell
-loadEnv                        -- IO () — reads .env in root directory
-loadEnvFile "path/to/file.env" -- IO () — reads a custom env file
-getEnv "PORT"                  -- IO (Maybe Text)
-requireEnv "PORT"              -- IO Text (throws if missing)
-getEnvInt "PORT"               -- IO (Maybe Int)
-getEnvBool "DEBUG"             -- IO (Maybe Bool)
-getEnvWithDefault "ENV" "prod" -- IO Text
-hasEnv "PORT"                  -- IO Bool
+type ViewCtx lang = (?ctx :: ViewContext, ?lang :: lang)
 ```
 
 ### `Lurk.Session`
 
-File-backed sessions with TVar storage. Includes `destroySession` for logout support and `cleanupSessions` for periodic expiry.
-The session store is automatically threaded through each request via the WAI Vault — you do not need to access it directly.
+File-backed sessions with TVar storage. The session store is threaded through each request via the WAI Vault:
 
 ```haskell
--- Accessed inside an Action:
-getSession      :: Action (Maybe Session)           -- current request's session
-getSessionValue :: Text -> Session -> Maybe Text    -- read a key
-setSessionValue :: SessionStore -> SessionId -> Text -> Text -> Action () -- write a key
-destroySession  :: SessionStore -> SessionId -> Action () -- remove session (logout)
+getSession      :: SessionStore -> Action Session
+getSessionValue :: Text -> Session -> Maybe Text
+setSessionValue :: SessionStore -> SessionId -> Text -> Text -> Action ()
+destroySession  :: SessionStore -> SessionId -> IO ()
 ```
-
-Cookies use the `Secure` flag in production (detected via `LURK_ENV`). Session ID validation prevents path traversal. Atomic file writes prevent corruption.
-
-### `Lurk.CSRF`
-
-Automatic CSRF protection on POST routes. Tokens are generated per-session and validated in middleware.
 
 ### `Lurk.Flash`
 
 One-time session-based messages:
 
 ```haskell
--- Set flash messages (stored in session)
 flashSuccess "Saved!"
 flashError   "Something went wrong"
 flashWarning "Please review"
@@ -362,112 +182,18 @@ flash :: (?ctx :: ViewContext) => Maybe Flash
 Composable form processing with built-in security guards:
 
 ```haskell
--- Run guards and return validated data
-runGuards :: [FormGuard] -> Action FormData
+fd <- runGuards
+    [ honeypot "b_website" (redirect "/404/")
+    , minSubmitTime 3 (redirect "/404/")
+    , mxRecord "email" (redirect "/404/")
+    , maxLength "name" 200 (redirect "/404/")
+    ]
 
--- Extraction helpers
-getParam       :: Text -> FormData -> Maybe Text
-getParamDef    :: Text -> Text -> FormData -> Text
-parseParam     :: Read a => Text -> FormData -> Maybe a
-
--- Built-in guards (fallback runs on failure, e.g. redirect)
-honeypot       :: Text -> Action () -> FormGuard       -- hidden field must be empty
-minSubmitTime  :: Int -> Action () -> FormGuard        -- session-backed timing check
-mxRecord       :: Text -> Action () -> FormGuard       -- DNS MX verification
-maxLength      :: Text -> Int -> Action () -> FormGuard -- field length limit
-
--- Session helper
-setFormLoadTime :: Action ()  -- call when rendering form for minSubmitTime
+let name  = getParamDef "name" "" fd
+    email = getParamDef "email" "" fd
 ```
 
-### `Lurk.Cloudflare`
-
-Typed access to Cloudflare-specific HTTP headers. Requires Cloudflare proxy (free plan works):
-
-```haskell
-import Lurk.Cloudflare
-
-cfCountry     :: Action (Maybe Text)  -- CF-IPCountry ("US", "ES")
-cfContinent   :: Action (Maybe Text)  -- CF-Continent ("NA", "EU")
-cfCity        :: Action (Maybe Text)  -- CF-City ("New York", "Madrid")
-cfRegion      :: Action (Maybe Text)  -- CF-Region ("NY", "MD")
-cfTimezone    :: Action (Maybe Text)  -- CF-Timezone ("America/New_York")
-cfASN         :: Action (Maybe Text)  -- CF-ASNum ("13335")
-cfBotScore    :: Action (Maybe Text)  -- Cf-Bot-Score ("0"-"100")
-cfBotVerified :: Action (Maybe Bool)  -- Cf-Bot-Verified (True/False)
-```
-
-Not re-exported from `Lurk.Prelude` — import `Lurk.Cloudflare` explicitly.
-
-### `Lurk.Log`
-
-Structured JSON logging:
-
-```haskell
-data LogLevel = LevelDebug | LevelInfo | LevelWarning | LevelError
-
-data Logger = Logger
-  { logDebug   :: Log
-  , logInfo    :: Log
-  , logWarning :: Log
-  , logError   :: Log
-  }
-
-type Log = Text -> [(Text, Value)] -> IO ()
-
-newLogger :: FilePath -> IO Logger
-```
-
-Usage:
-
-```haskell
-logger <- newLogger "logs/app.log"
-logInfo logger "Server started" [("port", toJSON port)]
-logError logger "Connection failed" [("host", toJSON host)]
-```
-
-Each log entry is a JSON line with `level`, `message`, `timestamp`, and optional structured fields. The log directory is created automatically.
-
-### `Lurk.Email.SMTP`
-
-Self-contained SMTP client with no external email library dependencies:
-
-```haskell
-sendEmail         :: SmtpConfig -> Email -> IO (Either EmailError ())  -- cert validation ON
-sendEmailInsecure :: SmtpConfig -> Email -> IO (Either EmailError ())  -- cert validation OFF
-smtpConfig        :: Text -> Text -> IO (Maybe SmtpConfig)            -- load from env
-```
-
-`sendEmail` validates TLS certificates (secure default). `sendEmailInsecure` skips validation.
-
-`smtpConfig fromEmail fromName` reads `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_ENCR` from environment. Returns `Nothing` if any required field is missing.
-
-Supports STARTTLS and SMTPS with automatic detection. Includes AUTH LOGIN, multi-line response parsing, and 30-second timeout.
-
-### `Lurk.Deploy`
-
-```haskell
-lurk deploy  -- builds binary, uploads via SSH, restarts service
-```
-
-Configured via `lurk.yaml`:
-
-```yaml
-project: my-app
-build:
-  optimize: true
-  target: x86_64-linux
-deploy:
-  provider: ssh
-  config:
-    host: example.com
-    path: /var/www/my-app
-    user: deploy
-    service_name: my-app
-    activate_cmd: sudo systemctl restart my-app
-  env_vars:
-    DATABASE_URL: DATABASE_URL
-```
+---
 
 ## Competitive Advantages
 
@@ -485,20 +211,11 @@ deploy:
 | Form guards | Pipeline | Manual rules | Manual | Manual | Manual |
 | Flash messages | Built-in | Session flash | N/A | N/A | N/A |
 
-## Planned
-
-- `Lurk.Auth` — Authentication primitives
-- `Lurk.Email` — HTTP-based email providers (Mailgun, SendGrid, Resend)
-- `Lurk.DB` — Database/ORM layer
-- `Lurk.WebSocket` — WebSocket support
-
 ## Testing
 
 ```bash
 cabal test lurk-tests
 ```
-
-Tests cover session management (file-backed store, atomic writes, cleanup), CSRF token handling, flash messages (data types, session integration), SMTP error handling, and QQ parser correctness (string literals, single braces, implicit params, nested lurks).
 
 ## License
 
