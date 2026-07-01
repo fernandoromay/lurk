@@ -5,13 +5,14 @@ module Commands.Run
     ) where
 
 import Lurk.Env (loadEnv)
-import Shared (updateCabalModules, safeCallProcess)
+import Shared (updateCabalModules, updateCabalDbDeps, safeCallProcess)
 import qualified Log
 
 runProject :: IO ()
 runProject = do
     loadEnv
     updateCabalModules
+    updateCabalDbDeps
     putStrLn "Starting LURK dev server..."
     result <- safeCallProcess "cabal" ["run", "-v0"]
     case result of
@@ -22,6 +23,7 @@ buildProject :: IO ()
 buildProject = do
     loadEnv
     updateCabalModules
+    updateCabalDbDeps
     putStrLn "Building project..."
     result <- safeCallProcess "cabal" ["build", "-v0"]
     case result of

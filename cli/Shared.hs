@@ -2,6 +2,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Shared
     ( updateCabalModules
+    , updateCabalDbDeps
     , scaffoldTemplates
     , availableScaffoldTypes
     , promptChoice
@@ -285,3 +286,116 @@ injectImport filePath importLine = do
         let (before, impsAndAfter) = span (not . isImportLine) lines'
         let (imps, after) = span isImportLine impsAndAfter
         TIO.writeFile filePath (T.unlines (before ++ imps ++ [importLine] ++ after))
+
+----------------------------------------------------------------------
+-- DB dependency injection
+----------------------------------------------------------------------
+
+-- | Detect DB backend from Main.hs and inject matching dependency into cabal file.
+updateCabalDbDeps :: IO ()
+updateCabalDbDeps = do
+    mainExists <- doesFileExist "Main.hs"
+    if not mainExists then pure () else do
+        mainContent <- TIO.readFile "Main.hs"
+        let backend = detectDbBackend mainContent
+        cabalFiles <- filter (".cabal" `isSuffixOf`) <$> listDirectory "."
+        case cabalFiles of
+            [] -> pure ()
+            (cabalFile:_) -> do
+                content <- TIO.readFile cabalFile
+                case injectDbDeps content backend of
+                    Nothing -> pure ()
+                    Just newContent -> do
+                        TIO.writeFile cabalFile newContent
+                        putStrLn $ "Auto-updated DB dependencies for " ++ showBackend backend ++ "."
+
+-- | Detect which DB backend is configured in Main.hs by grepping for constructor names.
+detectDbBackend :: T.Text -> Maybe DBBackend
+detectDbBackend content
+    | "SqliteDb" `T.isInfixOf` content   = Just SQLiteB
+    | "PostgresDb" `T.isInfixOf` content = Just PostgresB
+    | "MysqlDb" `T.isInfixOf` content    = Just MySQLB
+    | "sqliteConfig" `T.isInfixOf` content = Just SQLiteB
+    | "postgresConfig" `T.isInfixOf` content = Just PostgresB
+    | otherwise = Nothing
+
+data DBBackend = SQLiteB | PostgresB | MySQLB
+
+showBackend :: Maybe DBBackend -> String
+showBackend Nothing        = "none"
+showBackend (Just SQLiteB)   = "SQLite"
+showBackend (Just PostgresB) = "PostgreSQL"
+showBackend (Just MySQLB)    = "MySQL"
+
+-- | DB dependency strings for each backend.
+dbDependency :: DBBackend -> T.Text
+dbDependency SQLiteB   = "sqlite-simple >= 0.4"
+dbDependency PostgresB = "postgresql-simple >= 0.6"
+dbDependency MySQLB    = "mysql-simple >= 0.3"
+
+-- | Known DB dependency prefixes to remove when switching backends.
+dbDepPrefixes :: [T.Text]
+dbDepPrefixes =
+    [ "sqlite-simple"
+    , "postgresql-simple"
+    , "mysql-simple"
+    ]
+
+-- | Inject DB dependency into the build-depends section of a cabal file.
+-- Removes any existing DB deps first, then adds the new one.
+injectDbDeps :: T.Text -> Maybe DBBackend -> Maybe T.Text
+injectDbDeps content Nothing = removeDbDeps content
+injectDbDeps content (Just backend) = do
+    cleaned <- removeDbDeps content
+    injectAfterBuildDepends cleaned (dbDependency backend)
+
+-- | Remove all known DB dependencies from build-depends.
+removeDbDeps :: T.Text -> Maybe T.Text
+removeDbDeps content = do
+    let lines' = T.lines content
+    depStart <- lookupIndex "build-depends:" (zip [(0::Int)..] lines')
+    let afterDep = drop (depStart + 1) lines'
+        indexed = zip [(depStart + 1 :: Int)..] afterDep
+    let isNextField (_, line) =
+            let stripped = T.strip line
+            in ":" `T.isInfixOf` stripped && not ("--" `T.isPrefixOf` stripped)
+        blockLines = takeWhile (not . isNextField) indexed
+        endIdx = if null blockLines then depStart + 1 else fst (last blockLines) + 1
+        -- Filter out lines containing DB deps
+        filteredBlock = filter (not . isDbDep . snd) blockLines
+        (before, _) = splitAt (depStart + 1) lines'
+        (_, after) = splitAt endIdx lines'
+    pure $ T.unlines (before ++ map snd filteredBlock ++ after)
+  where
+    isDbDep line = any (`T.isInfixOf` T.strip line) dbDepPrefixes
+
+-- | Inject a dependency string after "build-depends:" in a cabal file.
+injectAfterBuildDepends :: T.Text -> T.Text -> Maybe T.Text
+injectAfterBuildDepends content dep = do
+    let lines' = T.lines content
+    depStart <- lookupIndex "build-depends:" (zip [(0::Int)..] lines')
+    let afterDep = drop (depStart + 1) lines'
+        indexed = zip [(depStart + 1 :: Int)..] afterDep
+    let isNextField (_, line) =
+            let stripped = T.strip line
+            in ":" `T.isInfixOf` stripped && not ("--" `T.isPrefixOf` stripped)
+        blockLines = takeWhile (not . isNextField) indexed
+    -- Find the last non-empty line in the block to append after
+    let nonEmptyBlock = dropWhileEnd (T.null . T.strip . snd) blockLines
+    if null nonEmptyBlock then Nothing else do
+        let lastIdx = fst (last nonEmptyBlock)
+            lastLine = snd (last nonEmptyBlock)
+            -- Remove trailing comma if present, add new dep with comma
+            cleaned = T.dropWhileEnd (\c -> c == ',' || c == ' ') lastLine
+            newLine = cleaned <> ","
+            depLine = "                       " <> dep
+            (before, afterAll) = splitAt (lastIdx + 1) lines'
+            remaining = drop (length blockLines - length nonEmptyBlock) afterAll
+        pure $ T.unlines (before ++ [newLine, depLine] ++ remaining)
+
+-- | Lookup an index in an indexed list by matching a query against the second element.
+lookupIndex :: T.Text -> [(Int, T.Text)] -> Maybe Int
+lookupIndex _ [] = Nothing
+lookupIndex query ((idx, line):xs)
+    | query `T.isInfixOf` line && not ("--" `T.isPrefixOf` T.strip line) = Just idx
+    | otherwise = lookupIndex query xs
