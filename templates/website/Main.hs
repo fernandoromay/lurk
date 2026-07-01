@@ -5,14 +5,15 @@ import Lurk.App
 import Lurk.Env (loadEnv)
 import Router
 
-loadConfig :: IO Config
+loadConfig :: IO AppConfig
 loadConfig = do
-    pure Config
+    pure AppConfig
         { port          = 3000
         , domain        = P.domain
         , sessionMaxAge = Nothing
         , sessionIdle   = Nothing
         , minLogLevel   = LevelInfo
+        , database      = Nothing
         }
 
 main :: IO ()

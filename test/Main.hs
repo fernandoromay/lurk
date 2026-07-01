@@ -13,6 +13,7 @@ import qualified SecuritySpec
 import qualified ErrorSpec
 import qualified LanguageSpec
 import qualified ValidateSpec
+import qualified DBSpec
 
 main :: IO ()
 main = defaultMain $ testGroup "lurk"
@@ -27,4 +28,5 @@ main = defaultMain $ testGroup "lurk"
     , ErrorSpec.tests
     , LanguageSpec.tests
     , ValidateSpec.tests
+    , DBSpec.tests
     ]
