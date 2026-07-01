@@ -49,6 +49,15 @@ library
                       Lurk.Cloudflare
                       Lurk.Cookie
                       Lurk.CSRF
+                      Lurk.DB
+                      Lurk.DB.Config
+                      Lurk.DB.Error
+                      Lurk.DB.Log
+                      Lurk.DB.Migration
+                      Lurk.DB.Pool
+                      Lurk.DB.QQ
+                      Lurk.DB.TH
+                      Lurk.DB.Transaction
                       Lurk.Email.SMTP
                       Lurk.Env
                       Lurk.Error
@@ -91,7 +100,9 @@ library
                       case-insensitive,
                       aeson,
                       process,
-                      connection
+                      connection,
+                      sqlite-simple >= 0.4,
+                      resource-pool >= 0.4
 
     if !os(windows)
         build-depends: unix
@@ -150,6 +161,7 @@ test-suite lurk-tests
                       ErrorSpec
                       LanguageSpec
                       ValidateSpec
+                      DBSpec
     hs-source-dirs:   test
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
     build-depends:    base >=4.17.2.1,
@@ -168,4 +180,5 @@ test-suite lurk-tests
                       aeson,
                       wai,
                       wai-extra,
-                      http-types
+                      http-types,
+                      sqlite-simple
