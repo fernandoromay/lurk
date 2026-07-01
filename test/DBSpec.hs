@@ -6,14 +6,13 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Data.Text (Text)
 import qualified Data.Text as T
-import Database.SQLite.Simple (Only(..))
+import Lurk.DB.Core (DatabaseProvider(..), SqlValue(..), Only(..))
 import System.Directory (createDirectoryIfMissing)
 import System.IO.Temp (withSystemTempDirectory)
 import Control.Exception (SomeException, catch)
 
 import Lurk.DB.TH (camelToSnake, stripPrefix)
 import Lurk.DB.QQ (lurkSQL)
-import Lurk.DB.Core (DatabaseProvider(..), SqlValue(..))
 import Lurk.DB.Config (DbConfig(..), DbBackend(..), sqliteConfig)
 import Lurk.DB.SQLite (SqliteProvider, newSqlitePool)
 import Lurk.DB.Pool (withConnection, destroyPool)

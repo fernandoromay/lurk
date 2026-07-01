@@ -8,8 +8,16 @@ module Lurk.DB
     , DatabaseProvider(..)
     , FromRow(..)
     , ToRow(..)
+    , FromField(..)
+    , ToField(..)
       -- * SQL values
     , SqlValue(..)
+      -- * Query
+    , Query(..)
+      -- * Combinators
+    , field
+      -- * Wrappers
+    , Only(..)
       -- * Connection Pool
     , withConnection
     , destroyPool
@@ -45,8 +53,7 @@ module Lurk.DB
     , newPostgresPool
     ) where
 
-import Lurk.DB.Core (DatabaseProvider(..), SqlValue(..))
-import Database.SQLite.Simple (FromRow(..), ToRow(..))
+import Lurk.DB.Core (DatabaseProvider(..), FromRow(..), ToRow(..), FromField(..), ToField(..), SqlValue(..), Query(..), field, Only(..))
 import Lurk.DB.Config
 import Lurk.DB.Error
 import Lurk.DB.Log

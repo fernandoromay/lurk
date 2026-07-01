@@ -13,11 +13,10 @@ import Data.Maybe (mapMaybe)
 import Data.Text (pack)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
-import Database.SQLite.Simple (Only(..))
+import Lurk.DB.Core (DatabaseProvider(..), Query(..), Only(..))
 import System.Directory (listDirectory, doesFileExist)
 import System.FilePath (takeFileName, (</>))
 import System.IO (hFlush, stdout)
-import Lurk.DB.Core (DatabaseProvider(..), Query(..))
 
 -- | A migration record.
 data Migration = Migration

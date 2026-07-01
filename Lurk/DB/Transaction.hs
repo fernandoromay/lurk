@@ -6,7 +6,7 @@ module Lurk.DB.Transaction
     ) where
 
 import Control.Exception (SomeException, catch, throwIO)
-import Lurk.DB.Core (DatabaseProvider(..))
+import Lurk.DB.Core (DatabaseProvider(..), Query(..))
 
 -- | Run a block inside a transaction. Auto-commit on success, auto-rollback on exception.
 --
@@ -20,9 +20,9 @@ import Lurk.DB.Core (DatabaseProvider(..))
 -- @
 withTransaction :: DatabaseProvider db => db -> (db -> IO a) -> IO a
 withTransaction db action = do
-    execute db "BEGIN TRANSACTION" ()
+    execute db (Query "BEGIN TRANSACTION") ()
     result <- action db `catch` (\(e :: SomeException) -> do
-        execute db "ROLLBACK" ()
+        execute db (Query "ROLLBACK") ()
         throwIO e)
-    execute db "COMMIT" ()
+    execute db (Query "COMMIT") ()
     pure result
