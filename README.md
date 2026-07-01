@@ -56,7 +56,7 @@ lurk new website
 lurk run
 ```
 
-Starts the dev server at the port defined in your `Config`.
+Starts the dev server at the port defined in your `AppConfig`.
 
 ### 4. Add a page
 

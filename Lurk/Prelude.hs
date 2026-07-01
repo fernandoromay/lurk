@@ -123,7 +123,7 @@ import Lurk.Env (loadEnv, loadEnvFile, getEnv, getEnvInt, getEnvBool, getEnvWith
 import Lurk.View (ViewContext(..), ViewCtx, render, currentPath, csrfToken, flash, validationErrors, fieldErrors)
 import Lurk.Validate (Validation(..), ValidationError(..), Rule, field, fieldMaybe, required, isEmail, minLength, maxLength, numeric, oneOf, atLeast, atMost, custom, matches, validate, validateIO, runRules, IOValidator, noIO, (<.?>), liftPred, setValidationErrors)
 import Lurk.SEO
-import Lurk.App (LurkApp)
+import Lurk.App (LurkApp, getDbPool)
 import Lurk.Language (withLang)
 import Lurk.Core (Action, html, queryParam)
 import Lurk.Core qualified

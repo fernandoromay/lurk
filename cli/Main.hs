@@ -181,7 +181,7 @@ killHelp = unlines
     , ""
     , "Kill processes holding a TCP port."
     , ""
-    , "If no port is given, auto-detects from Main.hs Config record."
+    , "If no port is given, auto-detects from Main.hs AppConfig record."
     , "Detection priority: Main.hs port value -> .env lookup -> default 3000."
     ]
 

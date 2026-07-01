@@ -51,8 +51,8 @@ killPort port = do
   where
     portPattern p line = (":" ++ p) `isInfixOf` line
 
--- | Detect port: Config record in Main.hs is the highest source of truth.
--- Priority: Main.hs Config port value -> env file lookup -> default 3000
+-- | Detect port: AppConfig record in Main.hs is the highest source of truth.
+-- Priority: Main.hs AppConfig port value -> env file lookup -> default 3000
 detectPort :: IO String
 detectPort = do
     exists <- doesFileExist "Main.hs"
@@ -68,7 +68,7 @@ detectPort = do
                         pure $ T.unpack $ T.strip val
                     | otherwise -> detectPortFromEnv val
 
--- | Find the port value from the Config record in Main.hs
+-- | Find the port value from the AppConfig record in Main.hs
 -- Handles both "port = 3003" and "{ port = 3003" (record syntax)
 findPortValue :: [T.Text] -> Maybe T.Text
 findPortValue [] = Nothing
