@@ -1,5 +1,5 @@
 -- | Template Haskell deriving for 'FromRow' and 'ToRow' instances.
--- Automatically maps Haskell record fields to snake_case column names.
+-- Generates sqlite-simple compatible instances.
 --
 -- @
 -- data Post = Post
@@ -29,12 +29,6 @@ import qualified Database.SQLite.Simple as SQLite
 
 -- | Derive 'FromRow' and 'ToRow' for a record type.
 -- Convention: strip the type name as prefix, convert camelCase to snake_case.
---
--- @
--- data Post = Post { postId :: Int, postTitle :: Text }
--- deriveFromRow ''Post
--- -- postId -> post_id, postTitle -> post_title
--- @
 deriveFromRow :: Name -> Q [Dec]
 deriveFromRow typeName = do
     info <- reify typeName
@@ -50,13 +44,11 @@ deriveFromRow typeName = do
   where
     fst3 (a, _, _) = a
 
--- | Generate a FromRow instance.
--- Generates: instance FromRow Post where fromRow = field >> field >> ... >> pure Post
+-- | Generate a FromRow instance using sqlite-simple's field combinator.
 deriveFromRowInstance :: Name -> [Type] -> [String] -> Q Dec
 deriveFromRowInstance typeName fields _colNames = do
     let instanceType = AppT (ConT ''FromRow) (ConT typeName)
         fieldCount = length fields
-        -- Generate: field >> field >> field >> ... >> pure Constructor
         fieldBodies = replicate fieldCount (AppE (VarE 'field) (VarE (mkName "_")))
         doBlock = DoE Nothing (map NoBindS fieldBodies)
         fromRowClause = Clause [] (NormalB doBlock) []
@@ -64,13 +56,11 @@ deriveFromRowInstance typeName fields _colNames = do
         [ FunD 'fromRow [fromRowClause]
         ]
 
--- | Generate a ToRow instance.
--- Generates: instance ToRow Post where toRow (Post x1 x2 x3) = toRow (x1, x2, x3)
+-- | Generate a ToRow instance using sqlite-simple's toRow on tuples.
 deriveToRowInstance :: Name -> [Type] -> [String] -> Q Dec
 deriveToRowInstance typeName fields _colNames = do
     let instanceType = AppT (ConT ''ToRow) (ConT typeName)
         fieldNames = map (\i -> mkName ("x" ++ show i)) [1..length fields]
-        -- Generate: toRow (Constructor x1 x2 x3) = toRow (x1, x2, x3)
         tupleExpr = AppE (VarE 'SQLite.toRow) (TupE (map (Just . VarE) fieldNames))
         toRowClause = Clause [ConP typeName [] (map VarP fieldNames)] (NormalB tupleExpr) []
     pure $ InstanceD Nothing [] instanceType
@@ -78,12 +68,6 @@ deriveToRowInstance typeName fields _colNames = do
         ]
 
 -- | Convert camelCase to snake_case.
--- Examples:
---   postTitle    -> post_title
---   postID       -> post_id
---   postURL      -> post_url
---   findById     -> find_by_id
---   authorName   -> author_name
 camelToSnake :: String -> String
 camelToSnake [] = []
 camelToSnake (c:cs)
@@ -91,10 +75,6 @@ camelToSnake (c:cs)
     | otherwise = c : camelToSnake cs
 
 -- | Strip a type name prefix from a field name.
--- Examples with type "Post":
---   postId    -> Id
---   postTitle -> Title
---   postURL   -> URL
 stripPrefix :: String -> String -> String
 stripPrefix [] field = field
 stripPrefix (p:ps) (f:fs)

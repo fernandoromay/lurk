@@ -1,38 +1,28 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 -- | Transaction support with auto-commit/rollback.
 -- Pattern matches Laravel's DB::transaction().
---
--- @
--- withTransaction pool $ \conn -> do
---     execute conn "INSERT INTO posts (title) VALUES (?)" (Only "Hello")
---     execute conn "UPDATE users SET post_count = post_count + 1 WHERE id = ?" (Only userId)
---     -- If either query throws, both are rolled back automatically
--- @
 module Lurk.DB.Transaction
     ( withTransaction
     ) where
 
-import Control.Exception (bracket, SomeException, catch, throwIO)
-import Database.SQLite.Simple (Connection, execute_)
-import qualified Database.SQLite.Simple as SQLite
-import Data.Pool (Pool, withResource)
+import Control.Exception (SomeException, catch, throwIO)
+import Lurk.DB.Core (DatabaseProvider(..))
 
 -- | Run a block inside a transaction. Auto-commit on success, auto-rollback on exception.
 --
--- @
--- withTransaction pool $ \conn -> do
---     execute conn "INSERT INTO posts (title) VALUES (?)" (Only "Hello")
---     -- If this throws, the INSERT is rolled back
---     execute conn "UPDATE users SET post_count = post_count + 1 WHERE id = ?" (Only userId)
--- @
+-- Note: Each operation within the transaction may use a different connection
+-- from the pool. For true single-connection transactions, use backend-specific APIs.
 --
--- Impossible to forget rollback — the bracket pattern guarantees it.
-withTransaction :: Pool Connection -> (Connection -> IO a) -> IO a
-withTransaction pool action = withResource pool $ \conn ->
-    bracket
-        (SQLite.execute_ conn "BEGIN TRANSACTION")
-        (\_ -> SQLite.execute_ conn "ROLLBACK" >> pure ())
-        (\_ -> do
-            result <- action conn
-            SQLite.execute_ conn "COMMIT"
-            pure result
-        )
+-- @
+-- withTransaction db $ \db' -> do
+--     execute db' "INSERT INTO posts (title) VALUES (?)" (Only "Hello")
+--     -- If this throws, the INSERT is rolled back
+-- @
+withTransaction :: DatabaseProvider db => db -> (db -> IO a) -> IO a
+withTransaction db action = do
+    execute db "BEGIN TRANSACTION" ()
+    result <- action db `catch` (\(e :: SomeException) -> do
+        execute db "ROLLBACK" ()
+        throwIO e)
+    execute db "COMMIT" ()
+    pure result

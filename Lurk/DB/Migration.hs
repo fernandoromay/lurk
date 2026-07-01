@@ -1,23 +1,5 @@
 -- | SQL migration runner.
 -- Reads @.sql@ files from a directory, tracks applied migrations in a @schema_migrations@ table.
---
--- Migration files follow the pattern @NNN_description.sql@:
---
--- @
--- -- 002_create_posts.sql
--- CREATE TABLE posts (
---   id INTEGER PRIMARY KEY AUTOINCREMENT,
---   title TEXT NOT NULL,
---   content TEXT,
---   author_id INTEGER REFERENCES users(id),
---   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
--- );
---
--- -- \@down
--- DROP TABLE posts;
--- @
---
--- The @-- \@down@ section is optional. If present, 'rollback' can undo it.
 module Lurk.DB.Migration
     ( Migration(..)
     , migrate
@@ -26,18 +8,16 @@ module Lurk.DB.Migration
     , ensureMigrationsTable
     ) where
 
-import Control.Exception (bracket, catch, SomeException)
-import Data.List (sort, isPrefixOf, isSuffixOf)
+import Data.List (sort, isSuffixOf, isPrefixOf)
 import Data.Maybe (mapMaybe)
+import Data.Text (pack)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
-import Database.SQLite.Simple hiding (withConnection)
-import qualified Database.SQLite.Simple as SQLite
-import qualified Data.Text as T
+import Database.SQLite.Simple (Only(..))
 import System.Directory (listDirectory, doesFileExist)
 import System.FilePath (takeFileName, (</>))
 import System.IO (hFlush, stdout)
-import Lurk.DB.Pool (Pool, withConnection)
+import Lurk.DB.Core (DatabaseProvider(..), Query(..))
 
 -- | A migration record.
 data Migration = Migration
@@ -47,25 +27,22 @@ data Migration = Migration
   } deriving (Show, Eq, Ord)
 
 -- | Ensure the schema_migrations table exists.
-ensureMigrationsTable :: Connection -> IO ()
-ensureMigrationsTable conn =
-    SQLite.execute_ conn
-        "CREATE TABLE IF NOT EXISTS schema_migrations (\
-        \ id INTEGER PRIMARY KEY,\
-        \ file TEXT NOT NULL UNIQUE,\
-        \ applied_at TEXT NOT NULL\
-        \ )"
-
--- | Get the next migration ID (max + 1).
-getNextMigrationId :: Connection -> IO Int
-getNextMigrationId conn = do
-    [Only maxId] <- SQLite.query_ conn "SELECT COALESCE(MAX(id), 0) FROM schema_migrations"
-    pure (maxId + 1)
+ensureMigrationsTable :: DatabaseProvider db => db -> IO ()
+ensureMigrationsTable db = do
+    _ <- execute db
+        (Query
+            "CREATE TABLE IF NOT EXISTS schema_migrations (\
+            \ id INTEGER PRIMARY KEY,\
+            \ file TEXT NOT NULL UNIQUE,\
+            \ applied_at TEXT NOT NULL\
+            \ )")
+        ()
+    pure ()
 
 -- | Get IDs of already-applied migrations.
-getAppliedMigrations :: Connection -> IO [Int]
-getAppliedMigrations conn = do
-    rows <- SQLite.query_ conn "SELECT id FROM schema_migrations ORDER BY id"
+getAppliedMigrations :: DatabaseProvider db => db -> IO [Int]
+getAppliedMigrations db = do
+    rows <- query db (Query "SELECT id FROM schema_migrations ORDER BY id") ()
     pure (map fromOnly rows)
 
 -- | Parse a migration filename. Returns (id, full path) or Nothing.
@@ -105,7 +82,6 @@ splitSections content = go (lines content) [] False
         | "@down" `isInfixOf` l = go ls acc True
         | otherwise = go ls (l:acc) False
     go (_:ls) acc True =
-        -- Everything after @down goes to the DOWN section
         (reverse acc, Just (dropWhile (\x -> null x || all (== ' ') x) ls))
 
     isInfixOf :: String -> String -> Bool
@@ -115,41 +91,40 @@ splitSections content = go (lines content) [] False
         | otherwise = isInfixOf needle rest
 
 -- | Run all pending migrations in order.
-migrate :: Pool Connection -> FilePath -> IO ()
-migrate pool dir = withConnection pool $ \conn -> do
-    ensureMigrationsTable conn
+migrate :: DatabaseProvider db => db -> FilePath -> IO ()
+migrate db dir = do
+    ensureMigrationsTable db
     files <- listMigrationFiles dir
-    applied <- getAppliedMigrations conn
-    let pending = filter (\(id, _) -> id `notElem` applied) files
+    applied <- getAppliedMigrations db
+    let pending = filter (\(id', _) -> id' `notElem` applied) files
     if null pending
         then putStrLn "All migrations applied."
         else do
             putStrLn $ "Running " ++ show (length pending) ++ " pending migration(s)..."
-            mapM_ (runMigration conn dir) pending
+            mapM_ (runMigration db dir) pending
             putStrLn "Migrations complete."
 
 -- | Run a single migration.
-runMigration :: Connection -> FilePath -> (Int, FilePath) -> IO ()
-runMigration conn dir (id, file) = do
+runMigration :: DatabaseProvider db => db -> FilePath -> (Int, FilePath) -> IO ()
+runMigration db dir (id', file) = do
     let path = dir </> file
     (upSql, _downSql) <- readMigration path
     putStrLn $ "  Applying: " ++ file
     hFlush stdout
-    -- Execute the UP migration
-    SQLite.execute_ conn (SQLite.Query (T.pack upSql))
-    -- Record the migration
+    execute db (Query (pack upSql)) ()
     now <- getCurrentTime
     let timestamp = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" now
-    SQLite.execute conn
-        "INSERT INTO schema_migrations (id, file, applied_at) VALUES (?, ?, ?)"
-        (id, file, timestamp)
+    execute db
+        (Query "INSERT INTO schema_migrations (id, file, applied_at) VALUES (?, ?, ?)")
+        (id', file, timestamp)
     hFlush stdout
 
 -- | Rollback the last applied migration (if it has a DOWN section).
-rollback :: Pool Connection -> FilePath -> IO ()
-rollback pool dir = withConnection pool $ \conn -> do
-    ensureMigrationsTable conn
-    rows <- SQLite.query_ conn "SELECT id, file FROM schema_migrations ORDER BY id DESC LIMIT 1" :: IO [(Int, String)]
+rollback :: DatabaseProvider db => db -> FilePath -> IO ()
+rollback db dir = do
+    ensureMigrationsTable db
+    rows <- query db (Query "SELECT id, file FROM schema_migrations ORDER BY id DESC LIMIT 1") ()
+            :: IO [(Int, String)]
     case rows of
         [] -> putStrLn "No migrations to rollback."
         [(mid, file)] -> do
@@ -160,22 +135,22 @@ rollback pool dir = withConnection pool $ \conn -> do
                 Just downSql -> do
                     putStrLn $ "  Rolling back: " ++ file
                     hFlush stdout
-                    SQLite.execute_ conn (SQLite.Query (T.pack downSql))
-                    SQLite.execute conn "DELETE FROM schema_migrations WHERE id = ?" (SQLite.Only (mid :: Int))
+                    execute db (Query (pack downSql)) ()
+                    execute db (Query "DELETE FROM schema_migrations WHERE id = ?") (Only (mid :: Int))
                     putStrLn "Rollback complete."
         _ -> pure ()
 
 -- | List all migrations (applied and pending).
-migrations :: Pool Connection -> FilePath -> IO [Migration]
-migrations pool dir = withConnection pool $ \conn -> do
-    ensureMigrationsTable conn
+migrations :: DatabaseProvider db => db -> FilePath -> IO [Migration]
+migrations db dir = do
+    ensureMigrationsTable db
     files <- listMigrationFiles dir
-    appliedIds <- getAppliedMigrations conn
+    appliedIds <- getAppliedMigrations db
     now <- getCurrentTime
     let timestamp = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" now
-    pure $ map (\(id, file) ->
+    pure $ map (\(id', file) ->
         Migration
-            { migrationId   = id
+            { migrationId   = id'
             , migrationFile = file
-            , migrationDate = if id `elem` appliedIds then timestamp else "pending"
+            , migrationDate = if id' `elem` appliedIds then timestamp else "pending"
             }) files

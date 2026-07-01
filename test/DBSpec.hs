@@ -6,18 +6,19 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Data.Text (Text)
 import qualified Data.Text as T
-import Database.SQLite.Simple (Only(..), query_, query, execute_, execute)
-import qualified Database.SQLite.Simple as SQLite
-import System.Directory (removeFile, doesFileExist, createDirectoryIfMissing)
+import Database.SQLite.Simple (Only(..))
+import System.Directory (createDirectoryIfMissing)
 import System.IO.Temp (withSystemTempDirectory)
 import Control.Exception (SomeException, catch)
 
 import Lurk.DB.TH (camelToSnake, stripPrefix)
 import Lurk.DB.QQ (lurkSQL)
-import Lurk.DB.Config (DbConfig(..), DbBackend(..), dbConfig)
-import Lurk.DB.Pool (Pool, newPool, withConnection, destroyPool)
+import Lurk.DB.Core (DatabaseProvider(..), SqlValue(..))
+import Lurk.DB.Config (DbConfig(..), DbBackend(..), sqliteConfig)
+import Lurk.DB.SQLite (SqliteProvider, newSqlitePool)
+import Lurk.DB.Pool (withConnection, destroyPool)
 import Lurk.DB.Transaction (withTransaction)
-import Lurk.DB.Migration (migrate, rollback, ensureMigrationsTable)
+import Lurk.DB.Migration (migrate)
 
 ----------------------------------------------------------------------
 -- camelToSnake tests
@@ -79,53 +80,53 @@ testLurkSQLInsert = do
 ----------------------------------------------------------------------
 -- Pool and query tests (using temp SQLite DB)
 ----------------------------------------------------------------------
-withTestDB :: (Pool SQLite.Connection -> IO a) -> IO a
+withTestDB :: (SqliteProvider -> IO a) -> IO a
 withTestDB action = withSystemTempDirectory "lurk-test" $ \dir -> do
     let dbPath = dir ++ "/test.db"
-    pool <- newPool dbConfig { dbFile = Just dbPath }
-    withConnection pool $ \conn ->
-        SQLite.execute_ conn "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT NOT NULL, content TEXT)"
-    result <- action pool
-    destroyPool pool
+    provider <- newSqlitePool sqliteConfig { dbFile = Just dbPath }
+    withConnection provider $ \db ->
+        execute db "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT NOT NULL, content TEXT)" ()
+    result <- action provider
+    destroyPool provider
     pure result
 
 testPoolInsertAndQuery :: Assertion
-testPoolInsertAndQuery = withTestDB $ \pool -> do
-    withConnection pool $ \conn -> do
-        execute conn "INSERT INTO posts (title, content) VALUES (?, ?)" ("Hello" :: Text, "World" :: Text)
-        rows <- query_ conn "SELECT id, title, content FROM posts" :: IO [(Int, Text, Text)]
+testPoolInsertAndQuery = withTestDB $ \provider -> do
+    withConnection provider $ \db -> do
+        execute db "INSERT INTO posts (title, content) VALUES (?, ?)" ("Hello" :: Text, "World" :: Text)
+        rows <- query db "SELECT id, title, content FROM posts" () :: IO [(Int, Text, Text)]
         length rows @?= 1
         let (pid, t, c) = head rows
         t @?= "Hello"
         c @?= "World"
 
 testPoolMultipleRows :: Assertion
-testPoolMultipleRows = withTestDB $ \pool -> do
-    withConnection pool $ \conn -> do
-        execute conn "INSERT INTO posts (title, content) VALUES (?, ?)" ("Post 1" :: Text, "Content 1" :: Text)
-        execute conn "INSERT INTO posts (title, content) VALUES (?, ?)" ("Post 2" :: Text, "Content 2" :: Text)
-        execute conn "INSERT INTO posts (title, content) VALUES (?, ?)" ("Post 3" :: Text, "Content 3" :: Text)
-        rows <- query_ conn "SELECT title FROM posts ORDER BY id" :: IO [Only Text]
+testPoolMultipleRows = withTestDB $ \provider -> do
+    withConnection provider $ \db -> do
+        execute db "INSERT INTO posts (title, content) VALUES (?, ?)" ("Post 1" :: Text, "Content 1" :: Text)
+        execute db "INSERT INTO posts (title, content) VALUES (?, ?)" ("Post 2" :: Text, "Content 2" :: Text)
+        execute db "INSERT INTO posts (title, content) VALUES (?, ?)" ("Post 3" :: Text, "Content 3" :: Text)
+        rows <- query db "SELECT title FROM posts ORDER BY id" () :: IO [Only Text]
         map fromOnly rows @?= ["Post 1", "Post 2", "Post 3"]
 
 ----------------------------------------------------------------------
 -- Transaction tests
 ----------------------------------------------------------------------
 testTransactionCommit :: Assertion
-testTransactionCommit = withTestDB $ \pool -> do
-    withTransaction pool $ \conn -> do
-        execute conn "INSERT INTO posts (title, content) VALUES (?, ?)" ("Committed" :: Text, "" :: Text)
-    withConnection pool $ \conn -> do
-        rows <- query_ conn "SELECT title FROM posts" :: IO [Only Text]
+testTransactionCommit = withTestDB $ \provider -> do
+    withTransaction provider $ \db -> do
+        execute db "INSERT INTO posts (title, content) VALUES (?, ?)" ("Committed" :: Text, "" :: Text)
+    withConnection provider $ \db -> do
+        rows <- query db "SELECT title FROM posts" () :: IO [Only Text]
         map fromOnly rows @?= ["Committed"]
 
 testTransactionRollback :: Assertion
-testTransactionRollback = withTestDB $ \pool -> do
-    (withTransaction pool (\conn -> do
-        execute conn "INSERT INTO posts (title, content) VALUES (?, ?)" ("Should Rollback" :: Text, "" :: Text)
+testTransactionRollback = withTestDB $ \provider -> do
+    (withTransaction provider (\db -> do
+        execute db "INSERT INTO posts (title, content) VALUES (?, ?)" ("Should Rollback" :: Text, "" :: Text)
         error "force rollback") :: IO ()) `catch` (\(_ :: SomeException) -> pure ())
-    withConnection pool $ \conn -> do
-        rows <- query_ conn "SELECT title FROM posts" :: IO [Only Text]
+    withConnection provider $ \db -> do
+        rows <- query db "SELECT title FROM posts" () :: IO [Only Text]
         length rows @?= 0
 
 ----------------------------------------------------------------------
@@ -138,13 +139,13 @@ testMigrationCreatesTable = withSystemTempDirectory "lurk-migrate-test" $ \dir -
     createDirectoryIfMissing True migrationsDir
     writeFile (migrationsDir ++ "/001_create_posts.sql")
         "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT NOT NULL);"
-    pool <- newPool dbConfig { dbFile = Just dbPath }
-    migrate pool migrationsDir
-    withConnection pool $ \conn -> do
-        execute conn "INSERT INTO posts (title) VALUES (?)" (Only ("test" :: Text))
-        rows <- query_ conn "SELECT title FROM posts" :: IO [Only Text]
+    provider <- newSqlitePool sqliteConfig { dbFile = Just dbPath }
+    migrate provider migrationsDir
+    withConnection provider $ \db -> do
+        execute db "INSERT INTO posts (title) VALUES (?)" (Only ("test" :: Text))
+        rows <- query db "SELECT title FROM posts" () :: IO [Only Text]
         map fromOnly rows @?= ["test"]
-    destroyPool pool
+    destroyPool provider
 
 ----------------------------------------------------------------------
 -- Test group

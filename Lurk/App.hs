@@ -1,4 +1,6 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
 module Lurk.App
     ( AppConfig(..)
     , appConfig
@@ -6,6 +8,8 @@ module Lurk.App
     , runLurk
     , LogLevel (..)
     , getDbPool
+    , withSomeProvider
+    , SomeProvider(..)
     ) where
 
 import Control.Concurrent (killThread)
@@ -19,10 +23,11 @@ import Lurk.Session.Middleware (sessionMiddleware)
 import Lurk.CSRF (csrfMiddleware)
 import Lurk.Error (errorMiddleware)
 import qualified Lurk.Env
-import Lurk.DB.Config (DbConfig(..))
-import Lurk.DB.Pool (Pool, newPool, destroyPool)
+import Lurk.DB.Config (DbConfig(..), DbBackend(..))
+import Lurk.DB.Core (DatabaseProvider, closeProvider)
 import qualified Lurk.DB.Migration as Migration
-import Database.SQLite.Simple (Connection)
+import Lurk.DB.SQLite (SqliteProvider, newSqlitePool)
+import Lurk.DB.Postgres (PostgresProvider, newPostgresPool)
 import System.Environment (setEnv)
 import System.IO (hFlush, stdout)
 import Web.Scotty (ScottyM, middleware, scottyApp)
@@ -32,14 +37,22 @@ import Network.Wai.Handler.Warp qualified as Warp
 import System.Posix.Signals (installHandler, sigINT, sigTERM, Handler(Catch))
 #endif
 
+-- | Existential wrapper for database providers.
+-- Hides the backend type so AppConfig can hold any provider.
+data SomeProvider where
+    SomeProvider :: DatabaseProvider db => db -> SomeProvider
+
+-- | Apply a function to the hidden provider.
+withSomeProvider :: SomeProvider -> (forall db. DatabaseProvider db => db -> IO a) -> IO a
+withSomeProvider (SomeProvider db) f = f db
+
 -- | Global reference to the database pool (if configured).
 {-# NOINLINE dbPoolRef #-}
-dbPoolRef :: IORef (Maybe (Pool Connection))
+dbPoolRef :: IORef (Maybe SomeProvider)
 dbPoolRef = unsafePerformIO (newIORef Nothing)
 
 -- | Get the database pool. Returns Nothing if no database is configured.
--- Call this from route handlers to access the DB.
-getDbPool :: IO (Maybe (Pool Connection))
+getDbPool :: IO (Maybe SomeProvider)
 getDbPool = readIORef dbPoolRef
 
 -- | Application configuration
@@ -87,16 +100,20 @@ runLurk cfg app = do
         Just dbCfg -> do
             putStrLn "Initializing database pool..."
             hFlush stdout
-            pool <- newPool dbCfg
-            writeIORef dbPoolRef (Just pool)
+            provider <- case dbBackend dbCfg of
+                SQLite -> SomeProvider <$> newSqlitePool dbCfg
+                PostgreSQL -> SomeProvider <$> newPostgresPool dbCfg
+                MySQL -> error "MySQL backend not yet supported"
+            writeIORef dbPoolRef (Just provider)
             -- Auto-migrate if configured
             if dbAutoMigrate dbCfg
                 then do
                     putStrLn "Running pending migrations..."
                     hFlush stdout
-                    Migration.migrate pool "migrations"
+                    case provider of
+                        SomeProvider pool -> Migration.migrate pool "migrations"
                 else pure ()
-            pure (Just pool)
+            pure (Just provider)
 
     waiApp <- scottyApp $ do
         middleware errorMiddleware
@@ -136,9 +153,9 @@ runLurk cfg app = do
     -- Destroy database pool
     case mPool of
         Nothing -> pure ()
-        Just pool -> do
+        Just (SomeProvider db) -> do
             putStrLn "Closing database connections..."
             hFlush stdout
-            destroyPool pool
+            closeProvider db
     putStrLn "LURK stopped successfully."
     hFlush stdout

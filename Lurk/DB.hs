@@ -2,10 +2,15 @@ module Lurk.DB
     ( -- * Configuration
       DbBackend(..)
     , DbConfig(..)
-    , dbConfig
+    , sqliteConfig
+    , postgresConfig
+      -- * Typeclasses
+    , DatabaseProvider(..)
+    , FromRow(..)
+    , ToRow(..)
+      -- * SQL values
+    , SqlValue(..)
       -- * Connection Pool
-    , Pool
-    , newPool
     , withConnection
     , destroyPool
       -- * Transactions
@@ -32,13 +37,23 @@ module Lurk.DB
     , stripPrefix
       -- * QuasiQuoter
     , lurkSQL
+      -- * SQLite backend
+    , SqliteProvider
+    , newSqlitePool
+      -- * PostgreSQL backend (stub)
+    , PostgresProvider
+    , newPostgresPool
     ) where
 
+import Lurk.DB.Core (DatabaseProvider(..), SqlValue(..))
+import Database.SQLite.Simple (FromRow(..), ToRow(..))
 import Lurk.DB.Config
 import Lurk.DB.Error
 import Lurk.DB.Log
 import Lurk.DB.Migration
-import Lurk.DB.Pool
-import Lurk.DB.TH
-import Lurk.DB.QQ
-import Lurk.DB.Transaction
+import Lurk.DB.Pool (withConnection, destroyPool)
+import Lurk.DB.TH (deriveFromRow, camelToSnake, stripPrefix)
+import Lurk.DB.QQ (lurkSQL)
+import Lurk.DB.Transaction (withTransaction)
+import Lurk.DB.SQLite (SqliteProvider, newSqlitePool)
+import Lurk.DB.Postgres (PostgresProvider, newPostgresPool)
